@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>DG Grammarian</title>
+		<style>
+			table.categories {
+				border: 1px solid blue;
+				border-collapse: collapse;
+			}
+			table.categories > tr {
+				border: 1px solid blue;
+			}
+			table.categories > tr:hover {
+			  background: blue;
+			}
+		</style>
+	</head>
+	<body>
+		<table id="phrases" class="categories"></table>
+
+		<script src="http://cloud.grammaticalframework.org/js/support.js"></script>
+		<script src="js/dg-grammarian.js"></script>
+		<script>
+			dg_grammarian.load_phrases("phrases.xml");
+		</script>
+	</body>
+</html>
