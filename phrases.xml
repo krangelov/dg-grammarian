@@ -966,7 +966,7 @@
 		<function desc="Thanks" name="GThanks"/>
 	</option>
 
-	<option dec="Phrase" id="Phrase">
+	<option desc="Phrase" id="Phrase">
 		<function desc="Yes" name="PYes"/>
 		<function desc="Yes (as an answer to no)" name="PYesToNo"/>
 		<function desc="No" name="PNo"/>

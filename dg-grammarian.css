@@ -1,0 +1,10 @@
+table.categories {
+	border: 1px solid blue;
+	border-collapse: collapse;
+}
+table.categories > tr {
+	border: 1px solid blue;
+}
+table.categories > tr:hover {
+  background: blue;
+}
