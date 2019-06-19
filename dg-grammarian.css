@@ -1,10 +1,15 @@
-table.categories {
-	border: 1px solid blue;
-	border-collapse: collapse;
+td.phrases {
+	background: lightgray;
 }
-table.categories > tr {
-	border: 1px solid blue;
+td.phrases > table > tr:hover {
+	background: #f0f0f0;
 }
-table.categories > tr:hover {
-  background: blue;
+td.phrases > table > tr.current {
+	background: white;
+}
+td.workarea {
+	vertical-align: top;
+	background: white;
+	padding-left: 10px;
+	padding-right: 10px;
 }

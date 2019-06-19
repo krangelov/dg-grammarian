@@ -68,7 +68,7 @@ dg_grammarian.load_phrases = function(url) {
 		var table = document.getElementById("phrases");
 		var nodes = dg_grammarian.editor.getSentences();
 		for (var i = 0; i < nodes.length; i++) {
-			table.appendChild(tr(node("td", {onclick: "dg_grammarian.onclick_sentence(getMultiSelection(element('from')), '"+nodes[i].getAttribute("id")+"',element('linearization'), element('choices'))"}, [text(nodes[i].getAttribute("desc"))])));
+			table.appendChild(tr(node("td", {onclick: "dg_grammarian.onclick_sentence(this.parentNode,getMultiSelection(element('from')), '"+nodes[i].getAttribute("id")+"',element('linearization'), element('choices'))"}, [text(nodes[i].getAttribute("desc"))])));
 		}
 	}
 
@@ -105,10 +105,19 @@ dg_grammarian.regenerate = function(selection,linearization,choices) {
 		choices.appendChild(tr(td(edit)));
 	}
 }
-dg_grammarian.onclick_sentence = function(selection,id,linearization,choices) {
+dg_grammarian.onclick_sentence = function(row,selection,id,linearization,choices) {
 	this.context = new ChoiceContext();
 	this.xmlNode = this.editor.getNode(id);
 	this.regenerate(selection,linearization,choices);
+	
+	var table = row.parentNode;
+	var tr = table.firstChild;
+	while (tr != null) {
+		tr.classList.remove("current");
+		tr = tr.nextSibling;
+	}
+
+	row.classList.add("current");
 }
 dg_grammarian.onchange_option = function(i,j,selection,linearization,choices) {
 	this.context.choices[i].setChoice(j);
