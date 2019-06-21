@@ -24,7 +24,7 @@ dg_grammarian.parse = function (selection, sentence, linearization, choices) {
 			choices.innerHTML="";
 		}
 	}
-	dg_grammarian.grammar_call("?command=c-parse&from=PhrasebookEng&input="+encodeURIComponent(sentence),extract_parse,dg_grammarian.errcont);
+	dg_grammarian.grammar_call("?command=c-parse&limit=1&from="+selection.current+"&input="+encodeURIComponent(sentence),extract_parse,dg_grammarian.errcont);
 }
 dg_grammarian.update_linearization = function (selection, lins, linearization, choices) {
 	function taggedBrackets(brackets) {
@@ -92,14 +92,27 @@ dg_grammarian.regenerate = function(selection,linearization,choices) {
 	choices.innerHTML = "";
 	for (var i in this.context.choices) {
 		var choice = this.context.choices[i];
-		var edit   = node("select", {onchange: "dg_grammarian.onchange_option("+i+",this.value,getMultiSelection(element('from')), element('linearization'), element('choices'))"}, []);
+		var desc   = choice.getNode().getAttribute("desc");
+		var edit   = null;
 
-		var nodes = choice.getOptions();
-		for (var j = 0; j < nodes.length; j++) {
-			var option = node("option", {value: j}, [text(nodes[j].getAttribute("desc"))]);
-			if (j == choice.getChoice())
-				option.selected = true;
-			edit.appendChild(option);
+		if (choice.getNode().nodeName == "boolean") {
+			edit = node("input", {type: "checkbox", onchange: "dg_grammarian.onchange_option("+i+",this.value,getMultiSelection(element('from')), element('linearization'), element('choices'))"}, []);
+			if (desc != null) {
+				edit = node("label", {}, [edit,text(desc)]);
+			}
+		} else {
+			choices.appendChild(tr(td(text(desc))));
+
+			edit = node("select", {style: "width: 100%",
+				                   onchange: "dg_grammarian.onchange_option("+i+",this.value,getMultiSelection(element('from')), element('linearization'), element('choices'))"}, []);
+
+			var nodes = choice.getOptions();
+			for (var j = 0; j < nodes.length; j++) {
+				var option = node("option", {value: j}, [text(nodes[j].getAttribute("desc"))]);
+				if (j == choice.getChoice())
+					option.selected = true;
+				edit.appendChild(option);
+			}
 		}
 
 		choices.appendChild(tr(td(edit)));
