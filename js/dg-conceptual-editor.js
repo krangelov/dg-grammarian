@@ -7,7 +7,8 @@ function ConceptualEditor(xmlDoc) {
 		var i = 0;
 		while (i < root.childNodes.length) {
 			var node = root.childNodes[i];
-			if ((node.nodeType == 3) && (!notWhitespace.test(node.nodeValue))) {
+			if ((node.nodeType == 3) && (!notWhitespace.test(node.nodeValue)) ||
+			    (node.nodeType == 8)) {
 				// that is, if it's a whitespace text node
 				root.removeChild(node);
 			} else {
