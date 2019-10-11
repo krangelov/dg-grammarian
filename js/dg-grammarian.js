@@ -1,12 +1,11 @@
 dg_grammarian = {
 	context: null,
-	xmlNode: null
+	xmlNode: null,
+	editor:  null
 }
 
-dg_grammarian.grammar_url = "http://cloud.grammaticalframework.org/grammars/Phrasebook.pgf"
-
 dg_grammarian.grammar_call=function(querystring,cont,errcont) {
-    http_get_json(this.grammar_url+querystring,cont,errcont)
+    http_get_json(this.editor.getGrammarURL()+querystring,cont,errcont)
 }
 
 dg_grammarian.errcont = function(text,code) { }

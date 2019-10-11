@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<phrasebook>
+<phrasebook grammar_url="http://cloud.grammaticalframework.org/grammars/Phrasebook.pgf">
     <sentence desc="Greetings" id="PGreeting">
 		<option>
 			<function desc="Male Speaker" name="PGreetingMale">

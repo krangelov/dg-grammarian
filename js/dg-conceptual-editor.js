@@ -20,6 +20,9 @@ function ConceptualEditor(xmlDoc) {
 
 	filter(xmlDoc.documentElement);
 }
+ConceptualEditor.prototype.getGrammarURL = function() {
+	return this.xmlDoc.documentElement.getAttribute("grammar_url");
+}
 ConceptualEditor.prototype.getNode = function(id) {
 	return this.xmlDoc.getElementById(id);
 }
