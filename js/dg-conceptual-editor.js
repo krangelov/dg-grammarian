@@ -21,7 +21,19 @@ function ConceptualEditor(xmlDoc) {
 	filter(xmlDoc.documentElement);
 }
 ConceptualEditor.prototype.getGrammarURL = function() {
-	return this.xmlDoc.documentElement.getAttribute("grammar_url");
+	return this.xmlDoc.getElementsByTagName("grammar")[0].getAttribute("url");
+}
+ConceptualEditor.prototype.getLanguages = function() {
+	var langs = [];
+	var langNodes = this.xmlDoc.getElementsByTagName("language");
+	for (var i = 0; i < langNodes.length; i++) {
+		langs.push({concr:  langNodes[i].getAttribute("concr"),
+		            input:  langNodes[i].getAttribute("input") == "true",
+		            output: langNodes[i].getAttribute("output") == "true",
+			        name:   langNodes[i].textContent
+			       });
+	}
+	return langs;
 }
 ConceptualEditor.prototype.getNode = function(id) {
 	return this.xmlDoc.getElementById(id);

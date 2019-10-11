@@ -62,19 +62,42 @@ dg_grammarian.update_linearization = function (selection, lins, linearization, c
 dg_grammarian.load_phrases = function(url) {
 	function extract_phrases(xml) {
 		dg_grammarian.editor =
-			new ConceptualEditor(xml.responseXML);
+			new ConceptualEditor(xml);
 
-		var table = document.getElementById("phrases");
+		var table = element("phrases");
 		var nodes = dg_grammarian.editor.getSentences();
 		for (var i = 0; i < nodes.length; i++) {
 			table.appendChild(tr(node("td", {onclick: "dg_grammarian.onclick_sentence(this.parentNode,getMultiSelection(element('from')), '"+nodes[i].getAttribute("id")+"',element('linearization'), element('choices'))"}, [text(nodes[i].getAttribute("desc"))])));
 		}
+
+		var langs = dg_grammarian.editor.getLanguages();
+		var from  = element('from');
+
+		var thead = node("thead");
+		var tbody = node("tbody");
+		for (var i = 0; i < langs.length; i++) {
+			var inp = node("input", {type: "checkbox", name: langs[i].concr})
+			inp.checked = langs[i].output;
+
+			var row = tr([node("td", {onclick: "changeItem(event,this)"}, [text(langs[i].name)])
+			             ,td(inp)
+			             ]);
+			tbody.appendChild(row);
+
+			if (langs[i].input) {
+				var row = node("tr", {onclick: "showCheckboxes(this.parentNode.parentNode)"}, 
+				                     [th(text(langs[i].name)),th(img("triangle.png"))]);
+				thead.appendChild(row);
+			}
+		}
+		from.appendChild(thead);
+		from.appendChild(tbody);
 	}
 
 	var xhttp = new XMLHttpRequest();
 	xhttp.onreadystatechange = function() {
-		if (this.readyState == 4 && this.status == 200) {
-			extract_phrases(this);
+		if (this.readyState == 4 && this.status == 200 && this.responseXML != null) {
+			extract_phrases(this.responseXML);
 		}
 	};
 	xhttp.open("GET", url, true);

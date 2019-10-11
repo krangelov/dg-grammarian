@@ -1,6 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<phrasebook grammar_url="http://cloud.grammaticalframework.org/grammars/Phrasebook.pgf">
+<phrasebook>
+	<grammar url="http://cloud.grammaticalframework.org/grammars/Phrasebook.pgf">
+		<language concr="PhrasebookBul" output="true">Bulgarian</language>
+		<language concr="PhrasebookCat">Catalan</language>
+		<language concr="PhrasebookChi">Chinese</language>
+		<language concr="PhrasebookDut">Dutch</language>
+		<language concr="PhrasebookEng" input="true" output="true">English</language>
+		<language concr="PhrasebookEst">Estonian</language>
+		<language concr="PhrasebookFin">Finnish</language>
+		<language concr="PhrasebookIta">Italian</language>
+		<language concr="PhrasebookPor">Portuguese</language>
+		<language concr="PhrasebookSpa">Spanish</language>
+		<language concr="PhrasebookSwe" output="true">Swedish</language>
+		<language concr="PhrasebookTha">Thai</language>
+	</grammar>
+
     <sentence desc="Greetings" id="PGreeting">
 		<option>
 			<function desc="Male Speaker" name="PGreetingMale">
