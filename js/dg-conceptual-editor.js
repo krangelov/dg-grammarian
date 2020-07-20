@@ -48,8 +48,12 @@ ConceptualEditor.prototype.getAbstractSyntax = function(node,context) {
 		return this.getAbstractSyntaxFunction(node,context);
 	} else if (node.nodeName == "option") {
 		return this.getAbstractSyntaxOption(node,context);
+	} else if (node.nodeName == "lexicon") {
+		return this.getAbstractSyntaxOption(node,context);
 	} else if (node.nodeName == "boolean") {
 		return this.getAbstractSyntaxOption(node,context);
+	} else if (node.nodeName == "numeral") {
+		return this.getAbstractSyntaxNumeral(node,context);
 	} else if (node.nodeName == "call") {
 		return this.getAbstractSyntaxCall(node,context);
 	} else if (node.nodeName == "argument") {
@@ -145,7 +149,7 @@ ChoiceContext.prototype.getNodeChoice = function(node) {
 	return choice;
 }
 ChoiceContext.prototype.getDefaultChoice = function(node) {
-	if (node.nodeName != "option")
+	if (node.nodeName != "option" && node.nodeName != "lexicon")
 		return 0;
 
 	var default_id     = node.getAttribute("default");

@@ -60,15 +60,15 @@ dg_grammarian.update_linearization = function (selection, lins, linearization, c
 	linearization.appendChild(node("table",{class: "result"},rows), this.nextSibling);
 }
 dg_grammarian.load_phrases = function(url) {
+	function extract_linearization(lins) {
+		for (var i in lins) {
+			this.appendChild(text(lins[i].text));
+		}
+	}
+
 	function extract_phrases(xml) {
 		dg_grammarian.editor =
 			new ConceptualEditor(xml);
-
-		var table = element("phrases");
-		var nodes = dg_grammarian.editor.getSentences();
-		for (var i = 0; i < nodes.length; i++) {
-			table.appendChild(tr(node("td", {onclick: "dg_grammarian.onclick_sentence(this.parentNode,getMultiSelection(element('from')), '"+nodes[i].getAttribute("id")+"',element('linearization'), element('choices'))"}, [text(nodes[i].getAttribute("desc"))])));
-		}
 
 		var langs = dg_grammarian.editor.getLanguages();
 		var from  = element('from');
@@ -78,11 +78,12 @@ dg_grammarian.load_phrases = function(url) {
 		for (var i = 0; i < langs.length; i++) {
 			var inp = node("input", {type: "checkbox", name: langs[i].concr})
 			inp.checked = langs[i].output;
+			inp.addEventListener("click", clickItem);
 
-			var row = tr([node("td", {onclick: "changeItem(event,this)"}, [text(langs[i].name)])
-			             ,td(inp)
-			             ]);
-			tbody.appendChild(row);
+			var lbl = node("td", {}, [text(langs[i].name)]);
+			lbl.addEventListener("click", changeItem);
+
+			tbody.appendChild(tr([lbl,td(inp)]));
 
 			if (langs[i].input) {
 				var row = node("tr", {onclick: "showCheckboxes(this.parentNode.parentNode)"}, 
@@ -92,6 +93,30 @@ dg_grammarian.load_phrases = function(url) {
 		}
 		from.appendChild(thead);
 		from.appendChild(tbody);
+
+		function init_phrases(selection) {
+			var table = element("phrases");
+			table.innerHTML="";
+			var nodes = dg_grammarian.editor.getSentences();
+			for (var i = 0; i < nodes.length; i++) {
+				var cell = node("td", {onclick: "dg_grammarian.onclick_sentence(this.parentNode,getMultiSelection(element('from')), '"+nodes[i].getAttribute("id")+"')"}, []);
+				dg_grammarian.grammar_call("?command=c-linearize&to="+selection.current+"&tree="+encodeURIComponent(nodes[i].getAttribute("desc")),bind(extract_linearization,cell),dg_grammarian.errcont);
+				table.appendChild(tr(cell));
+			}
+		};
+
+		from.addEventListener("multisel_changed", function(e) {
+			if (e.new_current) {
+				init_phrases(e.selection);
+			}
+			if (dg_grammarian.context != null) {
+				dg_grammarian.context.reset();
+				dg_grammarian.regenerate(e.selection,event.new_language,event.new_current);
+			}
+		});
+
+		var selection = getMultiSelection(from);
+		init_phrases(selection);
 	}
 
 	var xhttp = new XMLHttpRequest();
@@ -103,48 +128,69 @@ dg_grammarian.load_phrases = function(url) {
 	xhttp.open("GET", url, true);
 	xhttp.send();
 }
-dg_grammarian.regenerate = function(selection,linearization,choices) {
+dg_grammarian.regenerate = function(selection,update_lin,update_choices) {
+	var linearization = element('linearization');
+	var choices = element('choices');
+
 	var expr = this.editor.getAbstractSyntax(this.xmlNode,this.context);
 
-	function extract_linearization(lins) {		
-		dg_grammarian.update_linearization(selection, lins, linearization, choices);
+	if (update_lin) {
+		function extract_linearization(lins) {
+			dg_grammarian.update_linearization(selection, lins, linearization, choices);
+		}
+		dg_grammarian.grammar_call("?command=c-bracketedLinearize&to="+selection.langs_list.join("%20")+"&tree="+encodeURIComponent(expr),extract_linearization,dg_grammarian.errcont);
 	}
-	dg_grammarian.grammar_call("?command=c-bracketedLinearize&to="+selection.langs_list.join("%20")+"&tree="+encodeURIComponent(expr),extract_linearization,dg_grammarian.errcont);
 
-	choices.innerHTML = "";
-	for (var i in this.context.choices) {
-		var choice = this.context.choices[i];
-		var desc   = choice.getNode().getAttribute("desc");
-		var edit   = null;
-
-		if (choice.getNode().nodeName == "boolean") {
-			edit = node("input", {type: "checkbox", onchange: "dg_grammarian.onchange_option("+i+",this.value,getMultiSelection(element('from')), element('linearization'), element('choices'))"}, []);
-			if (desc != null) {
-				edit = node("label", {}, [edit,text(desc)]);
-			}
-		} else {
-			choices.appendChild(tr(td(text(desc))));
-
-			edit = node("select", {style: "width: 100%",
-				                   onchange: "dg_grammarian.onchange_option("+i+",this.value,getMultiSelection(element('from')), element('linearization'), element('choices'))"}, []);
-
-			var nodes = choice.getOptions();
-			for (var j = 0; j < nodes.length; j++) {
-				var option = node("option", {value: j}, [text(nodes[j].getAttribute("desc"))]);
-				if (j == choice.getChoice())
-					option.selected = true;
-				edit.appendChild(option);
+	if (update_choices) {
+		function extract_ui_linearization(lins) {
+			for (var i in lins) {
+				this.appendChild(text(lins[i].text));
 			}
 		}
 
-		choices.appendChild(tr(td(edit)));
+		choices.innerHTML = "";
+		for (var i in this.context.choices) {
+			var choice = this.context.choices[i];
+			var desc   = choice.getNode().getAttribute("desc");
+			var edit   = null;
+			var cell   = null;
+
+			if (choice.getNode().nodeName == "boolean") {
+				edit = node("input", {type: "checkbox", onchange: "dg_grammarian.onchange_option("+i+",this.value,getMultiSelection(element('from')))"}, []);
+				if (desc != null) {
+					edit = node("label", {}, [edit]);
+					cell = edit;
+				}
+			} else {
+				cell = td([]);
+				choices.appendChild(tr(cell));
+
+				edit = node("select", {style: "width: 100%",
+									   onchange: "dg_grammarian.onchange_option("+i+",this.value,getMultiSelection(element('from')))"}, []);
+
+				var nodes = choice.getOptions();
+				for (var j = 0; j < nodes.length; j++) {
+					var option = node("option", {value: j}, []);
+					dg_grammarian.grammar_call("?command=c-linearize&to="+selection.current+"&tree="+encodeURIComponent(nodes[j].getAttribute("desc")),bind(extract_ui_linearization,option),dg_grammarian.errcont);
+					if (j == choice.getChoice())
+						option.selected = true;
+					edit.appendChild(option);
+				}
+			}
+
+			if (cell != null) {
+				dg_grammarian.grammar_call("?command=c-linearize&to="+selection.current+"&tree="+encodeURIComponent(desc),bind(extract_ui_linearization,cell),dg_grammarian.errcont);
+			}
+
+			choices.appendChild(tr(td(edit)));
+		}
 	}
 }
-dg_grammarian.onclick_sentence = function(row,selection,id,linearization,choices) {
+dg_grammarian.onclick_sentence = function(row,selection,id) {
 	this.context = new ChoiceContext();
 	this.xmlNode = this.editor.getNode(id);
-	this.regenerate(selection,linearization,choices);
-	
+	this.regenerate(selection,true,true);
+
 	var table = row.parentNode;
 	var tr = table.firstChild;
 	while (tr != null) {
@@ -154,8 +200,8 @@ dg_grammarian.onclick_sentence = function(row,selection,id,linearization,choices
 
 	row.classList.add("current");
 }
-dg_grammarian.onchange_option = function(i,j,selection,linearization,choices) {
+dg_grammarian.onchange_option = function(i,j,selection) {
 	this.context.choices[i].setChoice(j);
 	this.context.reset();
-	this.regenerate(selection,linearization,choices);
+	this.regenerate(selection,true,true);
 }
