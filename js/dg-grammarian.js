@@ -174,6 +174,10 @@ dg_grammarian.regenerate = function(selection,update_lin,update_choices) {
 				var lexical_ids = ""
 				for (var j = 0; j < nodes.length; j++) {
 					var lemma  = nodes[j].getAttribute("desc");
+					if (lemma == null) {
+						lemma  = nodes[j].getAttribute("name");
+					}
+					
 					var option = node("option", {value: j}, []);
 					dg_grammarian.grammar_call("?command=c-linearize&to="+selection.current+"&tree="+encodeURIComponent(lemma),bind(extract_ui_linearization,option),dg_grammarian.errcont);
 					if (j == choice.getChoice())
@@ -204,6 +208,10 @@ dg_grammarian.regenerate = function(selection,update_lin,update_choices) {
 
 				var nodes = choice.getOptions();
 				for (var j = 0; j < nodes.length; j++) {
+					var desc = nodes[j].getAttribute("desc");
+					if (desc == null)
+						desc = nodes[j].getAttribute("name");
+
 					var option = node("option", {value: j}, []);
 					dg_grammarian.grammar_call("?command=c-linearize&to="+selection.current+"&tree="+encodeURIComponent(nodes[j].getAttribute("desc")),bind(extract_ui_linearization,option),dg_grammarian.errcont);
 					if (j == choice.getChoice())
