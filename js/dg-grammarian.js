@@ -8,7 +8,7 @@ dg_grammarian.grammar_call=function(querystring,cont,errcont) {
     http_get_json(this.editor.getGrammarURL()+querystring,cont,errcont)
 }
 
-dg_grammarian.errcont = function(text,code) { }
+dg_grammarian.errcont = function(text,code) { alert(text); }
 
 dg_grammarian.parse = function (selection, sentence, linearization, choices) {
 	function extract_linearization(lins) {
@@ -161,6 +161,40 @@ dg_grammarian.regenerate = function(selection,update_lin,update_choices) {
 					edit = node("label", {}, [edit]);
 					cell = edit;
 				}
+			} else if (choice.getNode().nodeName == "lexicon") {
+				cell = td([]);
+				choices.appendChild(tr(cell));
+
+				edit = node("select", {style: "width: 100%",
+									   onchange: "dg_grammarian.onchange_option("+i+",this.value,getMultiSelection(element('from')))"}, []);
+				edit.addEventListener("mousedown", this.ontoggle_lexicon_search);
+
+				var nodes       = choice.getOptions();
+				var options     = {}
+				var lexical_ids = ""
+				for (var j = 0; j < nodes.length; j++) {
+					var lemma  = nodes[j].getAttribute("desc");
+					var option = node("option", {value: j}, []);
+					dg_grammarian.grammar_call("?command=c-linearize&to="+selection.current+"&tree="+encodeURIComponent(lemma),bind(extract_ui_linearization,option),dg_grammarian.errcont);
+					if (j == choice.getChoice())
+						option.selected = true;
+					edit.appendChild(option);
+					options[lemma] = option;
+					lexical_ids = lexical_ids + " " + lemma;
+				}
+
+				var extract_senses = function (senses) {
+					for (var i in senses.result) {
+						for (var lemma in senses.result[i].lex_ids) {
+							if (lemma in this) {
+								this[lemma].dataset.gloss = senses.result[i].gloss;
+							}
+						}
+					}
+				}
+				gfwordnet.sense_call("lexical_ids="+encodeURIComponent(lexical_ids),bind(extract_senses,options),this.errcont);
+
+				edit = div_class("lexicon-select", [edit]);
 			} else {
 				cell = td([]);
 				choices.appendChild(tr(cell));
@@ -185,6 +219,68 @@ dg_grammarian.regenerate = function(selection,update_lin,update_choices) {
 			choices.appendChild(tr(td(edit)));
 		}
 	}
+}
+dg_grammarian.ontoggle_lexicon_search = function(e) {
+	if (dg_grammarian.current_lexicon_search != null) {
+		var div   = dg_grammarian.current_lexicon_search.getElementsByTagName("DIV")[0];
+		var input = dg_grammarian.current_lexicon_search.getElementsByTagName("INPUT")[0];
+		var sel   = dg_grammarian.current_lexicon_search.getElementsByTagName("SELECT")[0];
+
+		var table = div.getElementsByTagName("TABLE")[0];
+
+		var n = e.target;
+		while (n != null) {
+			if (n == table) {
+				sel.value = e.target.parentNode.dataset.value;
+				var change_event = new Event('change');
+				change_event.value = sel.value;
+				sel.dispatchEvent(change_event);
+			}
+			n = n.parentNode;
+		}
+		div.parentNode.removeChild(div);
+		input.parentNode.removeChild(input);
+		window.removeEventListener("mousedown", dg_grammarian.ontoggle_lexicon_search);
+		dg_grammarian.current_lexicon_search = null;
+	} else {
+		var select = e.target;
+		var width  = (select.clientWidth - 20) + "px";
+
+		var input = node("input", {type: "text"}, []);
+		input.style.width = width;
+		select.parentNode.appendChild(input);
+		input.focus();
+
+		var dropdown = node("table", {}, []);
+		select.parentNode.appendChild(node("div",{style: "min-width: "+e.target.clientWidth+"px"},[dropdown]));
+		input.focus();
+
+		var fill_table = function(prefix) {
+			var option = select.firstElementChild;
+			while (option != null) {
+				if (option.innerText.startsWith(prefix)) {
+					var row = tr([td([node("strong",{},[text(option.innerText+".")]),text(" "+option.dataset.gloss)])]);
+					row.dataset.value = option.value;
+					dropdown.appendChild(row);
+				}
+				option = option.nextElementSibling;
+			}
+		}
+
+		input.addEventListener("input", function(e) {
+			dropdown.innerHTML = "";
+			fill_table(e.target.value);
+		});
+
+		fill_table("");
+
+		dg_grammarian.current_lexicon_search = select.parentNode;
+		window.addEventListener("mousedown", dg_grammarian.ontoggle_lexicon_search);
+	}
+
+	e.stopPropagation();
+	e.returnValue = false;
+	return false;
 }
 dg_grammarian.onclick_sentence = function(row,selection,id) {
 	this.context = new ChoiceContext();

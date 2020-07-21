@@ -13,3 +13,40 @@ td.workarea {
 	padding-left: 10px;
 	padding-right: 10px;
 }
+
+.lexicon-select {
+	position:relative;
+	width:100%
+}
+
+.lexicon-select select {
+	position:absolute;
+	top:0px;
+	left:0px;
+	width:100%;
+	margin:0;
+}
+
+.lexicon-select input {
+	position:absolute;
+	top:1px;
+	left:1px;
+	border:none;
+}
+
+.lexicon-select div {
+	position: absolute;
+	top: 20px;
+	background: white;
+	border: 1px solid black;
+	max-height: 200px;
+	overflow-y: auto;
+}
+
+.lexicon-select div > table > tr:hover {
+	background-color: #DCDCDC;
+}
+
+.lexicon-select select:focus, .lexicon-select input:focus {
+	outline:none;
+}
