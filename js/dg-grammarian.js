@@ -213,7 +213,7 @@ dg_grammarian.regenerate = function(selection,update_lin,update_choices) {
 						desc = nodes[j].getAttribute("name");
 
 					var option = node("option", {value: j}, []);
-					dg_grammarian.grammar_call("?command=c-linearize&to="+selection.current+"&tree="+encodeURIComponent(nodes[j].getAttribute("desc")),bind(extract_ui_linearization,option),dg_grammarian.errcont);
+					dg_grammarian.grammar_call("?command=c-linearize&to="+selection.current+"&tree="+encodeURIComponent(desc),bind(extract_ui_linearization,option),dg_grammarian.errcont);
 					if (j == choice.getChoice())
 						option.selected = true;
 					edit.appendChild(option);
