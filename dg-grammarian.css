@@ -16,7 +16,8 @@ td.workarea {
 
 .lexicon-select {
 	position:relative;
-	width:100%
+	width: 100%;
+	height: 20px;
 }
 
 .lexicon-select select {
