@@ -41,6 +41,7 @@ td.workarea {
 	border: 1px solid black;
 	max-height: 200px;
 	overflow-y: auto;
+	z-index: 100;
 }
 
 .lexicon-select div > table > tr:hover {
