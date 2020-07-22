@@ -168,7 +168,7 @@ dg_grammarian.regenerate = function(selection,update_lin,update_choices) {
 			var cell   = null;
 
 			if (choice.getNode().nodeName == "boolean") {
-				edit = node("input", {type: "checkbox", onchange: "dg_grammarian.onchange_option("+i+",this.value,getMultiSelection(element('from')))"}, []);
+				edit = node("input", {type: "checkbox", onchange: "dg_grammarian.onchange_option("+i+",this.value)"}, []);
 				if (desc != null) {
 					edit = node("label", {}, [edit]);
 					cell = edit;
@@ -178,7 +178,7 @@ dg_grammarian.regenerate = function(selection,update_lin,update_choices) {
 				choices.appendChild(tr(cell));
 
 				edit = node("select", {style: "width: 100%",
-									   onchange: "dg_grammarian.onchange_option("+i+",this.value,getMultiSelection(element('from')))"}, []);
+									   onchange: "dg_grammarian.onchange_option("+i+",this.value)"}, []);
 				edit.addEventListener("mousedown", this.ontoggle_lexicon_search);
 
 				var nodes       = choice.getOptions();
@@ -215,25 +215,46 @@ dg_grammarian.regenerate = function(selection,update_lin,update_choices) {
 				cell = td([]);
 				choices.appendChild(tr(cell));
 
-				var min = choice.getNode().getAttribute("min");
+				let min = choice.getNode().getAttribute("min");
 				if (min == null)
 					min = 1;
 
-				var max = choice.getNode().getAttribute("max");
+				let max = choice.getNode().getAttribute("max");
 				if (max == null)
 					max = 100;
 
-				edit = node("input", {type: "range",
+				var edit = node("table", {style: "width: 100%"}, []);
+
+				var spinner =
+				       node("input", {type: "range",
 					                  min: min, max: max,
 					                  value: choice.getChoice(),
 					                  style: "width: 100%",
-									  onchange: "dg_grammarian.onchange_option("+i+",this.value,getMultiSelection(element('from')))"}, []);
+									  onchange: "dg_grammarian.onchange_option("+i+",this.value)"}, []);
+				var value_edit =
+				       node("input", {type: "text",
+					                  value: choice.getChoice(),
+					                  style: "width: 50px; text-align:right"}, []);
+				let index = i;
+				value_edit.addEventListener("change", function (e) {
+					var value = e.target.value;
+					if (value < min)
+						value = min;
+					if (value > max)
+						value = max;
+					dg_grammarian.onchange_option(index,value);
+				});
+				edit.appendChild(tr(node("td", {colspan: 3}, [spinner])));
+				edit.appendChild(tr([node("td",{style: "text-align: left"  },[text(min)])
+				                    ,node("td",{style: "text-align: center"},[value_edit])
+				                    ,node("td",{style: "text-align: right" },[text(max)])
+				                    ]));
 			} else {
 				cell = td([]);
 				choices.appendChild(tr(cell));
 
 				edit = node("select", {style: "width: 100%",
-									   onchange: "dg_grammarian.onchange_option("+i+",this.value,getMultiSelection(element('from')))"}, []);
+									   onchange: "dg_grammarian.onchange_option("+i+",this.value)"}, []);
 
 				var nodes = choice.getOptions();
 				for (var j = 0; j < nodes.length; j++) {
@@ -333,7 +354,8 @@ dg_grammarian.onclick_sentence = function(row,selection,id) {
 
 	row.classList.add("current");
 }
-dg_grammarian.onchange_option = function(i,j,selection) {
+dg_grammarian.onchange_option = function(i,j) {
+	var selection = getMultiSelection(element('from'));
 	this.context.choices[i].setChoice(j);
 	this.context.reset();
 	this.regenerate(selection,true,true);
