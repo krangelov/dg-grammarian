@@ -1,7 +1,8 @@
 dg_grammarian = {
 	context: null,
 	xmlNode: null,
-	editor:  null
+	editor:  null,
+	lin_cache: null
 }
 
 dg_grammarian.grammar_call=function(querystring,cont,errcont) {
@@ -59,13 +60,30 @@ dg_grammarian.update_linearization = function (selection, lins, linearization, c
 	linearization.innerHTML="";
 	linearization.appendChild(node("table",{class: "result"},rows), this.nextSibling);
 }
-dg_grammarian.load_phrases = function(url) {
-	function extract_linearization(lins) {
-		for (var i in lins) {
-			this.appendChild(text(lins[i].text));
-		}
+dg_grammarian.linearize_ui = function(selection,tree,cell) {
+	if (this.lin_cache == null || this.lin_cache.lang != selection.current) {
+		this.lin_cache = {lang: selection.current, lins: {}};
 	}
 
+	if (tree in this.lin_cache.lins) {
+		cell.appendChild(text(this.lin_cache.lins[tree]));
+	} else {
+		function extract_linearization(lins) {
+			for (var i in lins) {
+				this.cell.appendChild(text(lins[i].text));
+				this.lins[this.tree] = lins[i].text;
+			}
+		}
+
+		var info = {
+			cell: cell,
+			tree: tree,
+			lins: this.lin_cache.lins
+		}
+		this.grammar_call("?command=c-linearize&to="+selection.current+"&tree="+encodeURIComponent(tree),bind(extract_linearization,info),this.errcont);
+	}
+}
+dg_grammarian.load_phrases = function(url) {
 	function extract_phrases(xml) {
 		dg_grammarian.editor =
 			new ConceptualEditor(xml);
@@ -100,7 +118,7 @@ dg_grammarian.load_phrases = function(url) {
 			var nodes = dg_grammarian.editor.getSentences();
 			for (var i = 0; i < nodes.length; i++) {
 				var cell = node("td", {onclick: "dg_grammarian.onclick_sentence(this.parentNode,getMultiSelection(element('from')), '"+nodes[i].getAttribute("id")+"')"}, []);
-				dg_grammarian.grammar_call("?command=c-linearize&to="+selection.current+"&tree="+encodeURIComponent(nodes[i].getAttribute("desc")),bind(extract_linearization,cell),dg_grammarian.errcont);
+				dg_grammarian.linearize_ui(selection,nodes[i].getAttribute("desc"),cell);
 				table.appendChild(tr(cell));
 			}
 		};
@@ -142,12 +160,6 @@ dg_grammarian.regenerate = function(selection,update_lin,update_choices) {
 	}
 
 	if (update_choices) {
-		function extract_ui_linearization(lins) {
-			for (var i in lins) {
-				this.appendChild(text(lins[i].text));
-			}
-		}
-
 		choices.innerHTML = "";
 		for (var i in this.context.choices) {
 			var choice = this.context.choices[i];
@@ -179,7 +191,7 @@ dg_grammarian.regenerate = function(selection,update_lin,update_choices) {
 					}
 					
 					var option = node("option", {value: j}, []);
-					dg_grammarian.grammar_call("?command=c-linearize&to="+selection.current+"&tree="+encodeURIComponent(lemma),bind(extract_ui_linearization,option),dg_grammarian.errcont);
+					dg_grammarian.linearize_ui(selection,lemma,option);
 					if (j == choice.getChoice())
 						option.selected = true;
 					edit.appendChild(option);
@@ -213,7 +225,7 @@ dg_grammarian.regenerate = function(selection,update_lin,update_choices) {
 						desc = nodes[j].getAttribute("name");
 
 					var option = node("option", {value: j}, []);
-					dg_grammarian.grammar_call("?command=c-linearize&to="+selection.current+"&tree="+encodeURIComponent(desc),bind(extract_ui_linearization,option),dg_grammarian.errcont);
+					dg_grammarian.linearize_ui(selection,desc,option);
 					if (j == choice.getChoice())
 						option.selected = true;
 					edit.appendChild(option);
@@ -221,7 +233,7 @@ dg_grammarian.regenerate = function(selection,update_lin,update_choices) {
 			}
 
 			if (cell != null) {
-				dg_grammarian.grammar_call("?command=c-linearize&to="+selection.current+"&tree="+encodeURIComponent(desc),bind(extract_ui_linearization,cell),dg_grammarian.errcont);
+				dg_grammarian.linearize_ui(selection,desc,cell);
 			}
 
 			choices.appendChild(tr(td(edit)));
