@@ -118,7 +118,7 @@ ConceptualEditor.prototype.getAbstractSyntaxNumeral = function(node,context) {
         } else if (nbr >= 12 && nbr <= 19) {
             syntax = "(pot1to19 n" + nbr%10 + ")";
         } else if (nbr >= 20 && nbr%10 == 0) {
-            syntax = "(pot1 n" + Integer.toString(Math.floor(nbr/10)) + ")";
+            syntax = "(pot1 n" + Math.floor(nbr/10) + ")";
         } else if (nbr%10 != 0) {
             syntax = "(pot1plus n" + Math.floor(nbr/10) + " " + subs10(nbr%10) + ")";
         }
