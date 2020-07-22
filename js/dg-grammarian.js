@@ -211,6 +211,23 @@ dg_grammarian.regenerate = function(selection,update_lin,update_choices) {
 				gfwordnet.sense_call("lexical_ids="+encodeURIComponent(lexical_ids),bind(extract_senses,options),this.errcont);
 
 				edit = div_class("lexicon-select", [edit]);
+			} else if (choice.getNode().nodeName == "numeral") {
+				cell = td([]);
+				choices.appendChild(tr(cell));
+
+				var min = choice.getNode().getAttribute("min");
+				if (min == null)
+					min = 1;
+
+				var max = choice.getNode().getAttribute("max");
+				if (max == null)
+					max = 100;
+
+				edit = node("input", {type: "range",
+					                  min: min, max: max,
+					                  value: choice.getChoice(),
+					                  style: "width: 100%",
+									  onchange: "dg_grammarian.onchange_option("+i+",this.value,getMultiSelection(element('from')))"}, []);
 			} else {
 				cell = td([]);
 				choices.appendChild(tr(cell));
