@@ -19,7 +19,7 @@
 									<table id="from" class="multiselect"></table>
 								</td>
 								<td><input id="sentence" type="text"></td>
-								<td><input id="button" type="button" value="Parse" onclick="dg_grammarian.parse(getMultiSelection(element('from')), element('sentence').value, element('linearization'), element('choices')); element('sentence').value = ''"></td>
+								<td><input id="button" type="button" value="Parse" onclick="dg_grammarian.parse(element('sentence').value, element('linearization'), element('choices')); element('sentence').value = ''"></td>
 							</tr></table>
 						</td></tr>
 						<tr id="linearization"></tr>

@@ -52,3 +52,32 @@ td.workarea {
 .lexicon-select select:focus, .lexicon-select input:focus {
 	outline:none;
 }
+
+div.syntax {
+	border-bottom: 1px solid #66c;
+	border-radius: 5px;
+}
+
+table.result tr.syntax td {
+	text-align: center;
+	border: none;
+	background: #cef;
+	padding: 0px;
+}
+
+table.result tr.syntax td:first-child {
+	text-align: left;
+}
+
+table.result tr.syntax td:nth-child(2) {
+	padding-left: 3px;
+}
+
+table.result tr.syntax td:last-child {
+	border-right: 2px solid #66c;
+	padding-right: 3px;
+}
+
+div.selected_bracket {
+	font-weight: bold;
+}
