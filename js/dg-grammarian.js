@@ -7,23 +7,23 @@ dg_grammarian = {};
 	dg_grammarian.lin_cache = null;
 
 
-    var classField = function(opt_value, opt_validator) {
+    const SynsetField = function(opt_value, opt_validator) {
         opt_value = this.doClassValidation_(opt_value);
-        classField.superClass_.constructor.call(
+        SynsetField.superClass_.constructor.call(
                                       this, opt_value, opt_validator);
     };
-    classField.fromJson = function(options) {
-        var value = Blockly.utils.replaceMessageReferences(options['value']);
-        return new classField(value);
+    SynsetField.fromJson = function(options) {
+        const value = Blockly.utils.replaceMessageReferences(options['value']);
+        return new SynsetField(value);
     };
-    Blockly.utils.object.inherits(classField, Blockly.Field);
+    Blockly.utils.object.inherits(SynsetField, Blockly.Field);
 
-    classField.prototype.showEditor_ = function() {
+    SynsetField.prototype.showEditor_ = function() {
         search = div_class("wn_search",[text("x")]);
         document.body.appendChild(search);
     };
 
-    Blockly.fieldRegistry.register('field_wn_synset', classField);
+    Blockly.fieldRegistry.register('field_wn_synset', SynsetField);
 
     Blockly.Blocks['dg_when'] = {
       init: function() {
@@ -70,14 +70,15 @@ dg_grammarian = {};
           "args0": [
             {
               "type": "field_wn_synset",
-              "value": "foo"
+              "name": "name",
+              "value": "?"
             }
           ],
-          "message1": "do %1",
+          "message1": "then %1",
           "args1": [
             {
               "type": "input_statement",
-              "name": "do",
+              "name": "do"
             }
           ],
           "previousStatement": null,
@@ -88,18 +89,18 @@ dg_grammarian = {};
         });
       }
     };
-    Blockly.Blocks['dg_options'] = {
+    Blockly.Blocks['dg_option'] = {
       init: function() {
         this.jsonInit({
-          "message0": 'options %1',
+          "message0": 'option %1',
           "args0": [
             {
               "type": "input_value",
-              "name": "DESCRIPTION",
+              "name": "desc",
               "check": "String"
             }
           ],
-          "message1": "do %1",
+          "message1": "list %1",
           "args1": [
             {
               "type": "input_statement",
@@ -108,7 +109,34 @@ dg_grammarian = {};
           ],
           "previousStatement": null,
           "nextStatement": null,
-          "inputsInline": false,
+          "colour": 100,
+          "tooltip": "Checks for an instance of a given WordNet class",
+        });
+      }
+    };
+    Blockly.Blocks['dg_call'] = {
+      init: function() {
+        this.jsonInit({
+          "message0": "call %1",
+          "args0": [
+            {
+              "type": "input_statement",
+              "name": "do",
+            }
+          ],
+          "previousStatement": null,
+          "nextStatement": null,
+          "colour": 100,
+          "tooltip": "Checks for an instance of a given WordNet class",
+        });
+      }
+    };
+    Blockly.Blocks['dg_numeral'] = {
+      init: function() {
+        this.jsonInit({
+          "message0": "numeral",
+          "previousStatement": null,
+          "nextStatement": null,
           "colour": 100,
           "tooltip": "Checks for an instance of a given WordNet class",
         });
@@ -822,15 +850,34 @@ dg_grammarian.onchange_production = function(fid,state,i) {
 
 dg_grammarian.onedit_rules = function(blocklyArea, blocklyDiv) {
     var workspace = Blockly.inject(blocklyDiv,
-        {media: 'https://blockly-demo.appspot.com/static/media/',
-         toolbox: element('toolbox')});
+        {toolbox: element('toolbox')});
 
-    var nodes = dg_grammarian.editor.getSentences();
-    for (var i = 0; i < nodes.length; i++) {
-        childBlock = workspace.newBlock("dg_sentence");
-        childBlock.initSvg();
-        childBlock.render();
+    function foo(node) {
+        const block = workspace.newBlock("dg_"+node.nodeName);
+
+        for (let i = 0; i < node.attributes.length; i++) {
+            const field = block.getField(node.attributes[i].name);
+            if (field != null)
+                field.setValue(node.attributes[i].value);
+        }
+
+        block.initSvg();
+        block.render();
+
+        const parentConnection = block.getInput("do").connection;
+
+        const children = node.childNodes;
+        for (let i = children.length-1; i >= 0; i--) {
+            childBlock = foo(children[i]);
+
+            const childConnection = childBlock.previousConnection;
+            parentConnection.connect(childConnection);
+        }
+
+        return block;
     }
+
+    foo(this.xmlNode)
 
     blocklyArea.style.width = '800px';
 
