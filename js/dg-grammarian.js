@@ -1,9 +1,135 @@
-dg_grammarian = {
-	context: null,
-	xmlNode: null,
-	editor:  null,
-	lin_cache: null
-}
+dg_grammarian = {};
+
+(function(){
+	dg_grammarian.context = null;
+	dg_grammarian.xmlNode = null;
+	dg_grammarian.editor = null;
+	dg_grammarian.lin_cache = null;
+
+
+    var classField = function(opt_value, opt_validator) {
+        opt_value = this.doClassValidation_(opt_value);
+        classField.superClass_.constructor.call(
+                                      this, opt_value, opt_validator);
+    };
+    classField.fromJson = function(options) {
+        var value = Blockly.utils.replaceMessageReferences(options['value']);
+        return new classField(value);
+    };
+    Blockly.utils.object.inherits(classField, Blockly.Field);
+
+    classField.prototype.showEditor_ = function() {
+        search = div_class("wn_search",[text("x")]);
+        document.body.appendChild(search);
+    };
+
+    Blockly.fieldRegistry.register('field_wn_synset', classField);
+
+    Blockly.Blocks['dg_when'] = {
+      init: function() {
+        this.jsonInit({
+          "message0": 'when %1',
+          "args0": [
+            {
+              "type": "input_value",
+              "name": "CLASS",
+              "check": "Boolean"
+            }
+          ],
+          "message1": "then %1",
+          "args1": [
+            {
+              "type": "input_statement",
+              "name": "do",
+            }
+          ],
+          "colour": 100,
+          "tooltip": "Checks for an instance of a given WordNet class",
+        });
+      }
+    };
+    Blockly.Blocks['dg_sentence'] = {
+      init: function() {
+        this.jsonInit({
+          "message0": "sentence %1",
+          "args0": [
+            {
+              "type": "input_statement",
+              "name": "do",
+            }
+          ],
+          "colour": 100,
+          "tooltip": "Checks for an instance of a given WordNet class",
+        });
+      }
+    };
+    Blockly.Blocks['dg_function'] = {
+      init: function() {
+        this.jsonInit({
+          "message0": 'function %1',
+          "args0": [
+            {
+              "type": "field_wn_synset",
+              "value": "foo"
+            }
+          ],
+          "message1": "do %1",
+          "args1": [
+            {
+              "type": "input_statement",
+              "name": "do",
+            }
+          ],
+          "previousStatement": null,
+          "nextStatement": null,
+          "inputsInline": false,
+          "colour": 100,
+          "tooltip": "Checks for an instance of a given WordNet class",
+        });
+      }
+    };
+    Blockly.Blocks['dg_options'] = {
+      init: function() {
+        this.jsonInit({
+          "message0": 'options %1',
+          "args0": [
+            {
+              "type": "input_value",
+              "name": "DESCRIPTION",
+              "check": "String"
+            }
+          ],
+          "message1": "do %1",
+          "args1": [
+            {
+              "type": "input_statement",
+              "name": "do",
+            }
+          ],
+          "previousStatement": null,
+          "nextStatement": null,
+          "inputsInline": false,
+          "colour": 100,
+          "tooltip": "Checks for an instance of a given WordNet class",
+        });
+      }
+    };
+    Blockly.Blocks['dg_instance_of'] = {
+      init: function() {
+        this.jsonInit({
+          "message0": 'instance of %1',
+          "args0": [
+            {
+              "type": "field_wn_synset"
+            }
+          ],
+          "output": "Boolean",
+          "colour": 100,
+          "tooltip": "Checks for an instance of a given WordNet class",
+        });
+      }
+    };
+})();
 
 dg_grammarian.grammar_call=function(querystring,cont,errcont) {
     http_get_json(this.editor.getGrammarURL()+querystring,cont,this.errcont)
@@ -692,4 +818,40 @@ dg_grammarian.onchange_production = function(fid,state,i) {
 	const info = state.chart[fid];
 	info.current = i;
 	state.update_ui();
+}
+
+dg_grammarian.onedit_rules = function(blocklyArea, blocklyDiv) {
+    var workspace = Blockly.inject(blocklyDiv,
+        {media: 'https://blockly-demo.appspot.com/static/media/',
+         toolbox: element('toolbox')});
+
+    var nodes = dg_grammarian.editor.getSentences();
+    for (var i = 0; i < nodes.length; i++) {
+        childBlock = workspace.newBlock("dg_sentence");
+        childBlock.initSvg();
+        childBlock.render();
+    }
+
+    blocklyArea.style.width = '800px';
+
+    var onresize = function(e) {
+      // Compute the absolute coordinates and dimensions of blocklyArea.
+      var element = blocklyArea;
+      var x = 0;
+      var y = 0;
+      do {
+        x += element.offsetLeft;
+        y += element.offsetTop;
+        element = element.offsetParent;
+      } while (element);
+      // Position blocklyDiv over blocklyArea.
+      blocklyDiv.style.left = x + 'px';
+      blocklyDiv.style.top = y + 'px';
+      blocklyDiv.style.width = '800px';
+      blocklyDiv.style.height = blocklyArea.offsetHeight + 'px';
+      Blockly.svgResize(workspace);
+    };
+    window.addEventListener('resize', onresize, false);
+    onresize();
+    Blockly.svgResize(workspace);
 }

@@ -4,8 +4,6 @@
 		<title>DG Grammarian</title>
 		<link rel="stylesheet" type="text/css" href="gf-wordnet.css">
 		<link rel="stylesheet" type="text/css" href="dg-grammarian.css">
-		<style>
-		</style>
 	</head>
 	<body>
 		<table style="border-collapse: collapse; border: 1px solid gray">
@@ -20,6 +18,7 @@
 								</td>
 								<td><input id="sentence" type="text"></td>
 								<td><input id="button" type="button" value="Parse" onclick="dg_grammarian.parse(element('sentence').value, element('linearization'), element('choices')); element('sentence').value = ''"></td>
+								<td><input id="button" type="button" value="Edit" onclick="dg_grammarian.onedit_rules(element('blocklyArea'), element('blocklyDiv'))"></td>
 							</tr></table>
 						</td></tr>
 						<tr id="linearization"></tr>
@@ -29,11 +28,16 @@
 						</td></tr>
 					</table>
 				</td>
+                <td id="blocklyArea">
+                </td>
 			</tr>
 		</table>
 
+        <div id="blocklyDiv" style="position: absolute"></div>
+
 		<script src="https://cloud.grammaticalframework.org/js/support.js"></script>
-		<script src="js/tsnejs.js"></script>
+		<script src="https://visjs.github.io/vis-network/standalone/umd/vis-network.min.js"></script>
+        <script src="https://unpkg.com/blockly/blockly.min.js"></script>
 		<script src="js/gf-wordnet.js"></script>
 		<script src="js/wordcloud2.js"></script>
 		<script src="js/multiselect.js"></script>
@@ -50,5 +54,20 @@
 				}
 			});
 		</script>
+
+      <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
+        <block type="controls_if"></block>
+        <block type="dg_when"></block>
+        <block type="dg_sentence"></block>
+        <block type="dg_function"></block>
+        <block type="dg_options"></block>
+        <block type="dg_instance_of"></block>
+        <block type="math_number">
+          <field name="NUM">123</field>
+        </block>
+        <block type="math_arithmetic"></block>
+        <block type="text"></block>
+        <block type="text_print"></block>
+      </xml>
 	</body>
 </html>

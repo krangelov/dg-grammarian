@@ -81,3 +81,17 @@ table.result tr.syntax td:last-child {
 div.selected_bracket {
 	font-weight: bold;
 }
+
+div.wn_search {
+	top: 0em;
+	left: 0em;
+	right: 0em;
+	bottom: 0em;
+	margin: 2em;
+	border: 1px solid #ccc;
+	background-color: #f3f3f3;
+	position: fixed;
+	min-width: 790px;
+	overflow: auto;
+	z-index: 100;
+}

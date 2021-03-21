@@ -38,7 +38,7 @@ ConceptualEditor.prototype.getLanguages = function() {
 ConceptualEditor.prototype.getNode = function(id) {
 	return this.xmlDoc.getElementById(id);
 }
-ConceptualEditor.prototype.getSentences = function(id) {
+ConceptualEditor.prototype.getSentences = function() {
 	return this.xmlDoc.getElementsByTagName("sentence");
 }
 ConceptualEditor.prototype.getAbstractSyntax = function(node,context) {
