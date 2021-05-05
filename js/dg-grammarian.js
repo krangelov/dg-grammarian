@@ -1,20 +1,34 @@
 dg_grammarian = {};
 
 (function(){
-	dg_grammarian.context = null;
-	dg_grammarian.xmlNode = null;
-	dg_grammarian.editor = null;
+	dg_grammarian.context   = null;
+	dg_grammarian.sentence  = null;
+	dg_grammarian.editor    = null;
+    dg_grammarian.edit_mode = true;
 	dg_grammarian.lin_cache = null;
 
+    Blockly.HSV_SATURATION = 0.77;
+    Blockly.HSV_VALUE      = 0.93;
 
     const SynsetField = function(opt_value, opt_validator) {
         opt_value = this.doClassValidation_(opt_value);
+        if (opt_value == null)
+            opt_value = "<function>";
         SynsetField.superClass_.constructor.call(
                                       this, opt_value, opt_validator);
+        this.SERIALIZABLE = true;
     };
     SynsetField.fromJson = function(options) {
         const value = Blockly.utils.replaceMessageReferences(options['value']);
         return new SynsetField(value);
+    };
+    SynsetField.prototype.toXml = function(fieldElement) {
+        fieldElement.textContent = this.value_;
+        return fieldElement;
+    };
+    SynsetField.prototype.fromXml = function(fieldElement) {
+        var value = fieldElement.textContent;
+        this.setValue(value);
     };
     Blockly.utils.object.inherits(SynsetField, Blockly.Field);
 
@@ -23,9 +37,69 @@ dg_grammarian = {};
         document.body.appendChild(search);
     };
 
-    Blockly.fieldRegistry.register('field_wn_synset', SynsetField);
+    Blockly.fieldRegistry.register("field_wn_synset", SynsetField);
 
-    Blockly.Blocks['dg_when'] = {
+    let arity_mutator = {
+        mutationToDom: function() {
+            let arity = 0;
+            for (;;arity++) {
+                const inp = this.getInput("arg "+arity);
+                if (inp == null)
+                    break;
+            }
+            if (arity > 0) {
+                const container = document.createElement('mutation');
+                container.setAttribute("arity", arity);
+                return container;
+            }
+            return null;
+        },
+        domToMutation: function(xmlElement) {
+            var arity = xmlElement.getAttribute('arity');
+            for (let i = 0; i < arity; i++) {
+                this.appendValueInput('arg '+i);
+            }
+        }
+    };
+    Blockly.Extensions.registerMutator("dg_arity_mutator", arity_mutator);
+
+    let desc_mutator = {
+        mutationToDom: function() {
+            const inp = this.getInput("desc");
+            if (inp != null) {
+                const container = document.createElement('mutation');
+                container.setAttribute("has_desc", 1);
+                return container;
+            }
+            return null;
+        },
+        domToMutation: function(xmlElement) {
+            var has_desc = xmlElement.getAttribute("has_desc");
+            if (has_desc == 1) {
+                this.appendValueInput("desc")
+                    .appendField('ui');
+            }
+        }
+    };
+    Blockly.Extensions.registerMutator("dg_desc_mutator", desc_mutator);
+
+    function sequenceToCode(block, name) {
+        let code = "";
+        let targetBlock = block.getInputTargetBlock(name);
+        while (targetBlock != null) {
+            const func = Blockly.JavaScript[targetBlock.type];
+            if (code != "")
+                code += ", ";
+            let res = func.call(targetBlock, targetBlock);
+            code += res;
+            if (targetBlock.nextConnection == null)
+                break;
+            targetBlock = targetBlock.nextConnection.targetBlock();
+        }
+        return code;
+    }
+
+    Blockly.Blocks['ConceptualEditor.When'] = {
       init: function() {
         this.jsonInit({
           "message0": 'when %1',
@@ -48,101 +122,396 @@ dg_grammarian = {};
         });
       }
     };
-    Blockly.Blocks['dg_sentence'] = {
+
+    Blockly.Blocks["ConceptualEditor.Sentence"] = {
       init: function() {
         this.jsonInit({
           "message0": "sentence %1",
           "args0": [
             {
-              "type": "input_statement",
-              "name": "do",
+              "type":  "input_value",
+              "name":  "content",
+              "check": "abstract_syntax"
             }
           ],
-          "colour": 100,
-          "tooltip": "Checks for an instance of a given WordNet class",
+          "message1": "ui %1",
+          "args1": [
+            {
+              "type":  "input_value",
+              "name":  "desc",
+              "check": "abstract_syntax"
+            }
+          ],
+          "colour": 44,
+          "tooltip": "Describes a family of phrases",
         });
       }
     };
-    Blockly.Blocks['dg_function'] = {
+    Blockly.JavaScript["ConceptualEditor.Sentence"] = function(block) {
+        let code = "dg_grammarian.editor.addSentence(";
+
+        code += Blockly.JavaScript.quote_(block.id)+",";
+
+        if (block.getInput("desc").connection.targetBlock() != null) {
+            code += Blockly.JavaScript.valueToCode(block, 'desc', Blockly.JavaScript.ORDER_NONE);
+        } else {
+            code += "null";
+        }
+
+        code += ","+Blockly.JavaScript.valueToCode(block, 'content', Blockly.JavaScript.ORDER_NONE);
+
+        code += ")";
+        return code;
+    };
+
+    Blockly.Blocks['ConceptualEditor.Function'] = {
       init: function() {
         this.jsonInit({
-          "message0": 'function %1',
+          "message0": '%1',
           "args0": [
             {
               "type": "field_wn_synset",
-              "name": "name",
-              "value": "?"
+              "name": "name"
             }
           ],
-          "message1": "then %1",
-          "args1": [
+          "output": "abstract_syntax",
+          "inputsInline": true,
+          "colour": 200,
+          "mutator": "dg_arity_mutator",
+          "tooltip": "Applies a function to a number of arguments"
+        });
+      }
+    };
+    Blockly.JavaScript["ConceptualEditor.Function"] = function(block) {
+        let code = "new ConceptualEditor.Function(";
+        
+        code += Blockly.JavaScript.quote_(block.getFieldValue('name'));
+        for (let i = 0; ;i++) {
+            let arg_code = Blockly.JavaScript.valueToCode(block, 'arg '+i, Blockly.JavaScript.ORDER_NONE);
+            if (arg_code == null || arg_code == "")
+                break;
+            code += ", "+arg_code;
+        }
+        code += ")";
+        return [code, Blockly.JavaScript.ORDER_NONE];
+    };
+
+    Blockly.Blocks['ConceptualEditor.Option'] = {
+      init: function() {
+        this.jsonInit({
+          "message0": "option %1",
+          "args0": [
             {
               "type": "input_statement",
-              "name": "do"
+              "name": "do",
             }
           ],
-          "previousStatement": null,
-          "nextStatement": null,
-          "inputsInline": false,
-          "colour": 100,
+          "message1": "ui %1",
+          "args1": [
+            {
+              "type":  "input_value",
+              "name":  "desc",
+              "check": "abstract_syntax"
+            }
+          ],
+          "output": "abstract_syntax",
+          "colour": 230,
           "tooltip": "Checks for an instance of a given WordNet class",
         });
       }
     };
-    Blockly.Blocks['dg_option'] = {
+    Blockly.JavaScript["ConceptualEditor.Option"] = function(block) {
+        let code =
+            "new ConceptualEditor.Option(";
+
+        if (block.getInput("desc").connection.targetBlock() != null) {
+            code += Blockly.JavaScript.valueToCode(block, 'desc', Blockly.JavaScript.ORDER_NONE);
+        } else {
+            code += "null";
+        }
+
+        code += ",";
+        code += sequenceToCode(block, "do");
+
+        code += ")";
+        return [code, Blockly.JavaScript.ORDER_NONE];
+    };
+
+    Blockly.Blocks['ConceptualEditor.Lexicon'] = {
       init: function() {
         this.jsonInit({
-          "message0": 'option %1',
+          "message0": 'lexicon %1',
+          "args0": [
+            {
+              "type": "input_statement",
+              "name": "do",
+            }
+          ],
+          "message1": "ui %1",
+          "args1": [
+            {
+              "type":  "input_value",
+              "name":  "desc",
+              "check": "abstract_syntax"
+            }
+          ],
+          "output": "abstract_syntax",
+          "colour": 230,
+          "tooltip": "Checks for an instance of a given WordNet class",
+        });
+      }
+    };
+    Blockly.JavaScript["ConceptualEditor.Lexicon"] = function(block) {
+        let code =
+            "new ConceptualEditor.Lexicon(";
+
+        if (block.getInput("desc").connection.targetBlock() != null) {
+            code += Blockly.JavaScript.valueToCode(block, 'desc', Blockly.JavaScript.ORDER_NONE);
+        } else {
+            code += "null";
+        }
+
+        code += ",";
+        code += sequenceToCode(block, "do");
+
+        code += ")";
+        return [code, Blockly.JavaScript.ORDER_NONE];
+    };
+
+    Blockly.Blocks["ConceptualEditor.Boolean"] = {
+      init: function() {
+        this.jsonInit({
+          "message0": 'checkbox',
+          "message1": 'on %1',
+          "args1": [
+            {
+              "type":  "input_value",
+              "name":  "checked",
+              "check": "abstract_syntax",
+            }
+          ],
+          "message2": 'off %1',
+          "args2": [
+            {
+              "type":  "input_value",
+              "name":  "unchecked",
+              "check": "abstract_syntax",
+            }
+          ],
+          "message3": "ui %1",
+          "args3": [
+            {
+              "type":  "input_value",
+              "name":  "desc",
+              "check": "abstract_syntax"
+            }
+          ],
+          "output": "abstract_syntax",
+          "colour": 230,
+          "tooltip": "Checks for an instance of a given WordNet class",
+        });
+      }
+    };
+    Blockly.JavaScript["ConceptualEditor.Boolean"] = function(block) {
+        let code =
+            "new ConceptualEditor.Boolean(";
+
+        if (block.getInput("desc").connection.targetBlock() != null) {
+            code += Blockly.JavaScript.valueToCode(block, 'desc', Blockly.JavaScript.ORDER_NONE);
+        } else {
+            code += "null";
+        }
+
+        code += ",";
+        code += Blockly.JavaScript.valueToCode(block, 'checked',   Blockly.JavaScript.ORDER_NONE);
+        code += ",";
+        code += Blockly.JavaScript.valueToCode(block, 'unchecked', Blockly.JavaScript.ORDER_NONE);
+
+        code += ")";
+        return [code, Blockly.JavaScript.ORDER_NONE];
+    };
+
+    Blockly.Blocks['ConceptualEditor.Numeral'] = {
+      init: function() {
+        this.jsonInit({
+          "message0": "numeral from %1 to %2 default %3",
+          "args0": [
+            {
+              "type":  "field_number",
+              "name":  "min",
+              "value": 0
+            },
+            {
+              "type": "field_number",
+              "name": "max",
+              "value": 100
+            },
+            {
+              "type": "field_number",
+              "name": "default",
+              "value": 5
+            }
+          ],
+          "message1": "ui %1",
+          "args1": [
+            {
+              "type":  "input_value",
+              "name":  "desc",
+              "check": "abstract_syntax"
+            }
+          ],
+          "output": "abstract_syntax",
+          "colour": 230,
+          "tooltip": "Checks for an instance of a given WordNet class",
+        });
+      }
+    };
+    Blockly.JavaScript["ConceptualEditor.Numeral"] = function(block) {
+        let code =
+            "new ConceptualEditor.Numeral(";
+
+        if (block.getInput("desc").connection.targetBlock() != null) {
+            code += Blockly.JavaScript.valueToCode(block, 'desc', Blockly.JavaScript.ORDER_NONE);
+        } else {
+            code += "null";
+        }
+
+        code +=  ","+block.getFieldValue('min');
+        code +=  ","+block.getFieldValue('max');
+        code +=  ","+block.getFieldValue('default');
+        
+        code +=  ")";
+
+        return [code, Blockly.JavaScript.ORDER_NONE];
+    };
+
+    Blockly.Blocks["ConceptualEditor.Item"] = {
+      init: function() {
+        this.jsonInit({
+          "message0": "item %1",
           "args0": [
             {
               "type": "input_value",
-              "name": "desc",
-              "check": "String"
+              "name": "of",
+              "check": "abstract_syntax"
             }
           ],
-          "message1": "list %1",
-          "args1": [
-            {
-              "type": "input_statement",
-              "name": "do",
-            }
-          ],
+          "mutator": "dg_desc_mutator",
           "previousStatement": null,
           "nextStatement": null,
-          "colour": 100,
+          "colour": 230,
           "tooltip": "Checks for an instance of a given WordNet class",
         });
       }
     };
-    Blockly.Blocks['dg_call'] = {
+    Blockly.JavaScript["ConceptualEditor.Item"] = function(block) {
+        let code = "new ConceptualEditor.Item(";
+        code += Blockly.JavaScript.valueToCode(block, 'of', Blockly.JavaScript.ORDER_NONE);
+
+        if (block.getInput("desc") != null) {
+            code += ","+Blockly.JavaScript.valueToCode(block, 'desc', Blockly.JavaScript.ORDER_NONE);
+        }
+
+        code += ")";
+        return code;
+    };
+
+    Blockly.Blocks["ConceptualEditor.Definition"] = {
       init: function() {
         this.jsonInit({
-          "message0": "call %1",
+          "message0": '%1',
           "args0": [
             {
-              "type": "input_statement",
-              "name": "do",
+              "type": "field_input",
+              "name": "id",
+              "value": "<definition>",
+              "spellcheck": false
             }
           ],
-          "previousStatement": null,
-          "nextStatement": null,
+          "message1": 'do %1',
+          "args1": [
+            {
+              "type": "input_value",
+              "name": "do",
+              "check": "abstract_syntax"
+            }
+          ],
           "colour": 100,
           "tooltip": "Checks for an instance of a given WordNet class",
         });
       }
     };
-    Blockly.Blocks['dg_numeral'] = {
+    Blockly.JavaScript["ConceptualEditor.Definition"] = function(block) {
+        const code =
+            "dg_grammarian.editor.addDefinition("+
+            Blockly.JavaScript.quote_(block.getFieldValue('id'))+
+            ", "+
+            Blockly.JavaScript.valueToCode(block, 'do', Blockly.JavaScript.ORDER_NONE)+
+            ");";
+        return code;
+    };
+
+    Blockly.Blocks['ConceptualEditor.Call'] = {
       init: function() {
         this.jsonInit({
-          "message0": "numeral",
-          "previousStatement": null,
-          "nextStatement": null,
+          "message0": 'call %1',
+          "args0": [
+            {
+              "type": "field_input",
+              "name": "ref",
+              "value": "<definition>",
+              "spellcheck": false
+            }
+          ],
+          "inputsInline": true,
+          "mutator": "dg_arity_mutator",
+          "output": "abstract_syntax",
           "colour": 100,
           "tooltip": "Checks for an instance of a given WordNet class",
         });
       }
     };
-    Blockly.Blocks['dg_instance_of'] = {
+    Blockly.JavaScript["ConceptualEditor.Call"] = function(block) {
+        let code = "new ConceptualEditor.Call(";
+        code += Blockly.JavaScript.quote_(block.getFieldValue("ref"));
+        for (let i = 0; ;i++) {
+            let arg_code = Blockly.JavaScript.valueToCode(block, "arg "+i, Blockly.JavaScript.ORDER_NONE);
+            if (arg_code == null || arg_code == "")
+                break;
+            code += ", "+arg_code;
+        }
+        code += ")";
+        return [code, Blockly.JavaScript.ORDER_NONE];
+    };
+
+    Blockly.Blocks['ConceptualEditor.Argument'] = {
+      init: function() {
+        this.jsonInit({
+          "message0": 'argument %1',
+          "args0": [
+            {
+              "type": "field_number",
+              "precision": 0,
+              "name": "arg_no",
+              "value": 0,
+              "spellcheck": false
+            }
+          ],
+          "output": "abstract_syntax",
+          "colour": 100,
+          "tooltip": "Checks for an instance of a given WordNet class",
+        });
+      }
+    };
+    Blockly.JavaScript["ConceptualEditor.Argument"] = function(block) {
+        const code =
+            "new ConceptualEditor.Argument("+
+            Blockly.JavaScript.quote_(""+block.getFieldValue("arg_no"))+
+            ")";
+        return [code, Blockly.JavaScript.ORDER_NONE];
+    };
+
+    Blockly.Blocks['ConceptualEditor.InstanceOf'] = {
       init: function() {
         this.jsonInit({
           "message0": 'instance of %1',
@@ -158,12 +527,6 @@ dg_grammarian = {};
       }
     };
 })();
-
-dg_grammarian.grammar_call=function(querystring,cont,errcont) {
-    http_get_json(this.editor.getGrammarURL()+querystring,cont,this.errcont)
-}
-
-dg_grammarian.errcont = function(text,code) { alert(text); }
 
 dg_grammarian.parse = function (sentence, linearization, choices) {
 	function collect_info(fid,state) {
@@ -454,13 +817,13 @@ dg_grammarian.parse = function (sentence, linearization, choices) {
 					delete this.chart[fid].traverse_fid;
 				}
 				const tree = this.getAbstractSyntax(this.root,0);
-				dg_grammarian.grammar_call("?command=c-bracketedLinearize&to="+gfwordnet.selection.langs_list.join("%20")+"&tree="+encodeURIComponent(tree),bind(extract_linearization,this));
+				gfwordnet.grammar_call("command=c-bracketedLinearize&to="+gfwordnet.selection.langs_list.join("%20")+"&tree="+encodeURIComponent(tree),bind(extract_linearization,this));
 			}
 			
 			state.update_ui();
 		}
 	}
-	dg_grammarian.grammar_call("?command=c-parseToChart&limit=1&from="+gfwordnet.selection.current+"&input="+encodeURIComponent(sentence),extract_parse);
+	gfwordnet.grammar_call("command=c-parseToChart&limit=1&from="+gfwordnet.selection.current+"&input="+encodeURIComponent(sentence),extract_parse);
 }
 dg_grammarian.linearize_ui = function(tree,cell) {
 	if (this.lin_cache == null || this.lin_cache.lang != gfwordnet.selection.current) {
@@ -482,78 +845,75 @@ dg_grammarian.linearize_ui = function(tree,cell) {
 			tree: tree,
 			lins: this.lin_cache.lins
 		}
-		this.grammar_call("?command=c-linearize&to="+gfwordnet.selection.current+"&tree="+encodeURIComponent(tree),bind(extract_linearization,info));
+		gfwordnet.grammar_call("command=c-linearize&to="+gfwordnet.selection.current+"&tree="+encodeURIComponent(tree),bind(extract_linearization,info));
 	}
 }
-dg_grammarian.load_phrases = function(url) {
-	function extract_phrases(xml) {
-		dg_grammarian.editor =
-			new ConceptualEditor(xml);
+dg_grammarian.resize_blockly_workspace = function(blocklyDiv) {
+    // Compute the absolute coordinates and dimensions of blocklyArea.
+    const rect = blocklyDiv.getBoundingClientRect();
+    blocklyDiv.style.width  = (window.innerWidth-rect.left-50)+'px';
+    blocklyDiv.style.height = (window.innerHeight-rect.top-50)+'px';
+    Blockly.svgResize(dg_grammarian.workspace);
+}
+dg_grammarian.load_phrases = function(url, phrases, from, blocklyDiv, toolbox) {
+    function onresize(e) {
+        dg_grammarian.resize_blockly_workspace(blocklyDiv);
+    };
+    window.addEventListener('resize', onresize, false);
 
-		var langs = dg_grammarian.editor.getLanguages();
-		var from  = element('from');
+    function init_phrases() {
+        clear(phrases);
+        const sentences = dg_grammarian.editor.getSentences();
+        for (let i = 0; i < sentences.length; i++) {
+            const cell = td([]);
+            cell.addEventListener("click", function(e) {
+                    dg_grammarian.onclick_sentence(this.parentNode, sentences[i]);
+                });
+            const context = new ChoiceContext(dg_grammarian.editor);
+            dg_grammarian.linearize_ui(sentences[i].getDesciption(context),cell);
+            phrases.appendChild(tr(cell));
+        }
+    };
 
-		var thead = node("thead");
-		var tbody = node("tbody");
-		for (var i = 0; i < langs.length; i++) {
-			var inp = node("input", {type: "checkbox", name: langs[i].concr})
-			inp.checked = langs[i].output;
-			inp.addEventListener("click", clickItem);
+    from.addEventListener("multisel_changed", function(e) {
+        gfwordnet.selection = e.selection;
+        if (e.new_current) {
+            init_phrases();
+        }
+        if (dg_grammarian.context != null) {
+            dg_grammarian.context.reset();
+            dg_grammarian.regenerate(event.new_language,event.new_current);
+        }
+    });
 
-			var lbl = node("td", {}, [text(langs[i].name)]);
-			lbl.addEventListener("click", changeItem);
+    gfwordnet.selection = getMultiSelection(from);
 
-			tbody.appendChild(tr([lbl,td(inp)]));
+    var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+        if (this.readyState == 4 && this.status == 200 && this.responseXML != null) {
+            dg_grammarian.workspace =
+                Blockly.inject(blocklyDiv,
+                    {toolbox: toolbox
+                    ,theme: {startHats: true}
+                    ,scrollbars: true
+                    });
 
-			if (langs[i].input) {
-				var row = node("tr", {onclick: "showCheckboxes(this.parentNode.parentNode)"}, 
-				                     [th(text(langs[i].name)),th(img("triangle.png"))]);
-				thead.appendChild(row);
-			}
-		}
-		from.appendChild(thead);
-		from.appendChild(tbody);
+            const dom = Blockly.Xml.textToDom(this.responseText);
+            Blockly.Xml.domToWorkspace(dom, dg_grammarian.workspace);
 
-		function init_phrases() {
-			var table = element("phrases");
-			clear(table);
-			var nodes = dg_grammarian.editor.getSentences();
-			for (var i = 0; i < nodes.length; i++) {
-				var cell = node("td", {onclick: "dg_grammarian.onclick_sentence(this.parentNode, '"+nodes[i].getAttribute("id")+"')"}, []);
-				dg_grammarian.linearize_ui(nodes[i].getAttribute("desc"),cell);
-				table.appendChild(tr(cell));
-			}
-		};
-
-		from.addEventListener("multisel_changed", function(e) {
-			gfwordnet.selection = e.selection;
-			if (e.new_current) {
-				init_phrases();
-			}
-			if (dg_grammarian.context != null) {
-				dg_grammarian.context.reset();
-				dg_grammarian.regenerate(event.new_language,event.new_current);
-			}
-		});
-
-		gfwordnet.selection = getMultiSelection(from);
-		init_phrases();
-	}
-
-	var xhttp = new XMLHttpRequest();
-	xhttp.onreadystatechange = function() {
-		if (this.readyState == 4 && this.status == 200 && this.responseXML != null) {
-			extract_phrases(this.responseXML);
-		}
-	};
-	xhttp.open("GET", url, true);
-	xhttp.send();
+            dg_grammarian.editor = new ConceptualEditor();
+            eval(Blockly.JavaScript.workspaceToCode(dg_grammarian.workspace));
+            init_phrases();
+        }
+    };
+    xhttp.open("GET", url, true);
+    xhttp.send();
 }
 dg_grammarian.regenerate = function(update_lin,update_choices) {
 	var linearization = element('linearization');
 	var choices = element('choices');
 
-	var expr = this.editor.getAbstractSyntax(this.xmlNode,this.context);
+	var expr = this.sentence.getAbstractSyntax(this.context);
 
 	if (update_lin) {
 		function extract_linearization(lins) {
@@ -561,24 +921,24 @@ dg_grammarian.regenerate = function(update_lin,update_choices) {
 			clear(linearization);
 			linearization.appendChild(table);
 		}
-		dg_grammarian.grammar_call("?command=c-bracketedLinearize&to="+gfwordnet.selection.langs_list.join("%20")+"&tree="+encodeURIComponent(expr),extract_linearization);
+		gfwordnet.grammar_call("command=c-bracketedLinearize&to="+gfwordnet.selection.langs_list.join("%20")+"&tree="+encodeURIComponent(expr),extract_linearization);
 	}
 
 	if (update_choices) {
 		clear(choices);
 		for (var i in this.context.choices) {
-			var choice = this.context.choices[i];
-			var desc   = choice.getNode().getAttribute("desc");
-			var edit   = null;
-			var cell   = null;
+			const choice = this.context.choices[i];
+			const desc   = choice.getNode().getDescription(new ChoiceContext(dg_grammarian.editor));
+			let edit   = null;
+			let cell   = null;
 
-			if (choice.getNode().nodeName == "boolean") {
+			if (choice.getNode() instanceof ConceptualEditor.Boolean) {
 				edit = node("input", {type: "checkbox", onchange: "dg_grammarian.onchange_option("+i+",this.value)"}, []);
 				if (desc != null) {
 					edit = node("label", {}, [edit]);
 					cell = edit;
 				}
-			} else if (choice.getNode().nodeName == "lexicon") {
+			} else if (choice.getNode() instanceof ConceptualEditor.Lexicon) {
 				cell = td([]);
 				choices.appendChild(tr(cell));
 
@@ -586,14 +946,11 @@ dg_grammarian.regenerate = function(update_lin,update_choices) {
 									   onchange: "dg_grammarian.onchange_option("+i+",this.value)"}, []);
 				edit.addEventListener("mousedown", this.ontoggle_lexicon_search);
 
-				var nodes       = choice.getOptions();
+				var items       = choice.getOptions();
 				var options     = {}
 				var lexical_ids = ""
-				for (var j = 0; j < nodes.length; j++) {
-					var lemma  = nodes[j].getAttribute("desc");
-					if (lemma == null) {
-						lemma  = nodes[j].getAttribute("name");
-					}
+				for (var j = 0; j < items.length; j++) {
+					var lemma  = items[j].getDescription(new ChoiceContext(dg_grammarian.editor));
 					
 					var option = node("option", {value: j}, []);
 					dg_grammarian.linearize_ui(lemma,option);
@@ -613,22 +970,22 @@ dg_grammarian.regenerate = function(update_lin,update_choices) {
 						}
 					}
 				}
-				gfwordnet.sense_call("lexical_ids="+encodeURIComponent(lexical_ids),bind(extract_senses,options),this.errcont);
+				gfwordnet.sense_call("lexical_ids="+encodeURIComponent(lexical_ids),bind(extract_senses,options));
 
 				edit = div_class("lexicon-select", [edit]);
-			} else if (choice.getNode().nodeName == "numeral") {
+			} else if (choice.getNode() instanceof ConceptualEditor.Numeral) {
 				cell = td([]);
 				choices.appendChild(tr(cell));
 
-				let min = choice.getNode().getAttribute("min");
+				let min = choice.getNode().min;
 				if (min == null)
 					min = 1;
 
-				let max = choice.getNode().getAttribute("max");
+				let max = choice.getNode().max;
 				if (max == null)
 					max = 100;
 
-				var edit = node("table", {style: "width: 100%"}, []);
+				edit = node("table", {style: "width: 100%"}, []);
 
 				var spinner =
 				       node("input", {type: "range",
@@ -661,21 +1018,19 @@ dg_grammarian.regenerate = function(update_lin,update_choices) {
 				edit = node("select", {style: "width: 100%",
 									   onchange: "dg_grammarian.onchange_option("+i+",this.value)"}, []);
 
-				var nodes = choice.getOptions();
-				for (var j = 0; j < nodes.length; j++) {
-					var desc = nodes[j].getAttribute("desc");
-					if (desc == null)
-						desc = nodes[j].getAttribute("name");
+				var items = choice.getOptions();
+				for (let j = 0; j < items.length; j++) {
+					const item_desc = items[j].getDescription(new ChoiceContext(dg_grammarian.editor));
 
-					var option = node("option", {value: j}, []);
-					dg_grammarian.linearize_ui(desc,option);
+					const option = node("option", {value: j}, []);
+					dg_grammarian.linearize_ui(item_desc,option);
 					if (j == choice.getChoice())
 						option.selected = true;
 					edit.appendChild(option);
 				}
 			}
 
-			if (cell != null) {
+			if (desc != null) {
 				dg_grammarian.linearize_ui(desc,cell);
 			}
 
@@ -745,19 +1100,28 @@ dg_grammarian.ontoggle_lexicon_search = function(e) {
 	e.returnValue = false;
 	return false;
 }
-dg_grammarian.onclick_sentence = function(row,id) {
-	this.context = new ChoiceContext();
-	this.xmlNode = this.editor.getNode(id);
-	this.regenerate(true,true);
+dg_grammarian.onclick_sentence = function(row,sentence) {
+    if (dg_grammarian.edit_mode) {
+        this.context  = new ChoiceContext(dg_grammarian.editor);
+        this.sentence = sentence;
+        this.regenerate(true,true);
 
-	var table = row.parentNode;
-	var tr = table.firstChild;
-	while (tr != null) {
-		tr.classList.remove("current");
-		tr = tr.nextSibling;
-	}
-
-	row.classList.add("current");
+        const items = document.getElementsByClassName("current");
+        while (items.length > 0) {
+            items[0].classList.remove("current");
+        }
+        row.classList.add("current");
+    } else {
+        const block =
+            dg_grammarian.workspace.getBlockById(sentence.id);
+        // Scroll the workspace so that the block's top left corner
+        // is in the (0.5; 0.5) part of the viewport.
+        const xy = block.getRelativeToSurfaceXY();	    
+        const m = dg_grammarian.workspace.getMetrics();
+        dg_grammarian.workspace.scrollbar.set(
+            xy.x * dg_grammarian.workspace.scale - m.contentLeft + m.viewWidth*0.5,
+            xy.y * dg_grammarian.workspace.scale - m.contentTop + m.viewHeight*0.5);
+    }
 }
 dg_grammarian.onchange_option = function(i,j) {
 	this.context.choices[i].setChoice(j);
@@ -848,57 +1212,23 @@ dg_grammarian.onchange_production = function(fid,state,i) {
 	state.update_ui();
 }
 
-dg_grammarian.onedit_rules = function(blocklyArea, blocklyDiv) {
-    var workspace = Blockly.inject(blocklyDiv,
-        {toolbox: element('toolbox')});
-
-    function foo(node) {
-        const block = workspace.newBlock("dg_"+node.nodeName);
-
-        for (let i = 0; i < node.attributes.length; i++) {
-            const field = block.getField(node.attributes[i].name);
-            if (field != null)
-                field.setValue(node.attributes[i].value);
+dg_grammarian.onedit_rules = function(editBtn, linearization, choices, blocklyDiv) {
+    if (dg_grammarian.edit_mode) {
+        dg_grammarian.edit_mode = false;
+        editBtn.value = "Done";
+        clear(linearization);
+        clear(choices);
+        const items = document.getElementsByClassName("current");
+        while (items.length > 0) {
+            items[0].classList.remove("current");
         }
-
-        block.initSvg();
-        block.render();
-
-        const parentConnection = block.getInput("do").connection;
-
-        const children = node.childNodes;
-        for (let i = children.length-1; i >= 0; i--) {
-            childBlock = foo(children[i]);
-
-            const childConnection = childBlock.previousConnection;
-            parentConnection.connect(childConnection);
-        }
-
-        return block;
+        blocklyDiv.style.display = "block";
+        dg_grammarian.resize_blockly_workspace(blocklyDiv);
+    } else {
+        dg_grammarian.editor.reset();
+        eval(Blockly.JavaScript.workspaceToCode(dg_grammarian.workspace));
+        dg_grammarian.edit_mode = true;
+        editBtn.value = "Edit";
+        blocklyDiv.style.display = "none";
     }
-
-    foo(this.xmlNode)
-
-    blocklyArea.style.width = '800px';
-
-    var onresize = function(e) {
-      // Compute the absolute coordinates and dimensions of blocklyArea.
-      var element = blocklyArea;
-      var x = 0;
-      var y = 0;
-      do {
-        x += element.offsetLeft;
-        y += element.offsetTop;
-        element = element.offsetParent;
-      } while (element);
-      // Position blocklyDiv over blocklyArea.
-      blocklyDiv.style.left = x + 'px';
-      blocklyDiv.style.top = y + 'px';
-      blocklyDiv.style.width = '800px';
-      blocklyDiv.style.height = blocklyArea.offsetHeight + 'px';
-      Blockly.svgResize(workspace);
-    };
-    window.addEventListener('resize', onresize, false);
-    onresize();
-    Blockly.svgResize(workspace);
 }

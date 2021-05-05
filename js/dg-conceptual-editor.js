@@ -1,87 +1,60 @@
-function ConceptualEditor(xmlDoc) {
-	this.xmlDoc = xmlDoc;
-
-	var notWhitespace = /\S/
-
-	function filter(root) {
-		var i = 0;
-		while (i < root.childNodes.length) {
-			var node = root.childNodes[i];
-			if ((node.nodeType == 3) && (!notWhitespace.test(node.nodeValue)) ||
-			    (node.nodeType == 8)) {
-				// that is, if it's a whitespace text node
-				root.removeChild(node);
-			} else {
-				filter(node);
-				i++;
-			}
-		}
-	}
-
-	filter(xmlDoc.documentElement);
+function ConceptualEditor() {
+    this.reset();
 }
-ConceptualEditor.prototype.getGrammarURL = function() {
-	return this.xmlDoc.getElementsByTagName("grammar")[0].getAttribute("url");
-}
-ConceptualEditor.prototype.getLanguages = function() {
-	var langs = [];
-	var langNodes = this.xmlDoc.getElementsByTagName("language");
-	for (var i = 0; i < langNodes.length; i++) {
-		langs.push({concr:  langNodes[i].getAttribute("concr"),
-		            input:  langNodes[i].getAttribute("input") == "true",
-		            output: langNodes[i].getAttribute("output") == "true",
-			        name:   langNodes[i].textContent
-			       });
-	}
-	return langs;
-}
-ConceptualEditor.prototype.getNode = function(id) {
-	return this.xmlDoc.getElementById(id);
+ConceptualEditor.prototype.addSentence = function(id,desc,content) {
+    this.sentences.push(new ConceptualEditor.Sentence(id,desc,content));
 }
 ConceptualEditor.prototype.getSentences = function() {
-	return this.xmlDoc.getElementsByTagName("sentence");
+    return this.sentences;
 }
-ConceptualEditor.prototype.getAbstractSyntax = function(node,context) {
-	if (node.nodeName == "sentence") {
-		return this.getAbstractSyntaxSentence(node,context);
-	} else if (node.nodeName == "function") {
-		return this.getAbstractSyntaxFunction(node,context);
-	} else if (node.nodeName == "option") {
-		return this.getAbstractSyntaxOption(node,context);
-	} else if (node.nodeName == "lexicon") {
-		return this.getAbstractSyntaxOption(node,context);
-	} else if (node.nodeName == "boolean") {
-		return this.getAbstractSyntaxOption(node,context);
-	} else if (node.nodeName == "numeral") {
-		return this.getAbstractSyntaxNumeral(node,context);
-	} else if (node.nodeName == "call") {
-		return this.getAbstractSyntaxCall(node,context);
-	} else if (node.nodeName == "argument") {
-		return this.getAbstractSyntaxArgument(node,context);
-	}
-	return null;
+ConceptualEditor.prototype.addDefinition = function(name, body) {
+    this.definitions[name] = body;
 }
-ConceptualEditor.prototype.getAbstractSyntaxSentence = function(node,context) {
-	var child = node.firstChild;
-	var expr = this.getAbstractSyntax(child,context);
+ConceptualEditor.prototype.getDefinitionBody = function(name) {
+    return this.definitions[name];
+}
+ConceptualEditor.prototype.reset = function() {
+    this.sentences   = [];
+    this.definitions = {};
+}
+
+ConceptualEditor.Sentence = function(id,desc,content) {
+    this.id      = id;
+    this.content = content;
+    this.desc    = desc;
+}
+ConceptualEditor.Sentence.prototype.getAbstractSyntax = function(context) {
+	var expr = this.content.getAbstractSyntax(context);
 	context.trim();
 	return expr;
 }
-ConceptualEditor.prototype.getAbstractSyntaxFunction = function(node,context) {
-	var func      = node.getAttribute("name");
-	var arguments = node.childNodes;
-	if (arguments == null || arguments.length == 0) {
+ConceptualEditor.Sentence.prototype.getDesciption = function(context) {
+	var expr = this.desc.getAbstractSyntax(context);
+	context.trim();
+	return expr;
+}
+
+ConceptualEditor.Function = function() {
+    this.func = arguments[0];
+    this.arguments = [];
+    for (var i = 1; i < arguments.length; i++) {
+        this.arguments.push(arguments[i]);
+    }
+}
+ConceptualEditor.Function.prototype.getAbstractSyntax = function(context) {
+	if (this.arguments == null || this.arguments.length == 0) {
 		// context.incrementFId(function.size()); --??
-		if (func.indexOf(' ') >= 0)
-			func = "("+func+")";
-		return func;
+		if (this.func.indexOf(' ') >= 0)
+			return "("+this.func+")";
+        else
+            return this.func;
 	}
 
 	// context.incrementFId(function.size()-1); --??
 
-	var expr = func;
-	for (var i = 0; i < arguments.length; i++) {
-		expr += " " + this.getAbstractSyntax(arguments[i],context);
+	var expr = this.func;
+	for (var i = 0; i < this.arguments.length; i++) {
+		expr += " " + this.arguments[i].getAbstractSyntax(context);
 	}
 	expr = "("+expr+")";
 
@@ -89,14 +62,82 @@ ConceptualEditor.prototype.getAbstractSyntaxFunction = function(node,context) {
 
 	return expr;
 }
-ConceptualEditor.prototype.getAbstractSyntaxOption = function(node,context) {
-	var options = node.childNodes;
-	var parent  = context.changeParentNode(node);
-	var expr = this.getAbstractSyntax(options[context.choose(node)],context);
+
+ConceptualEditor.Item = function(content,desc) {
+    this.content = content;
+    this.desc    = desc;
+}
+ConceptualEditor.Item.prototype.getAbstractSyntax = function(context) {
+    return this.content.getAbstractSyntax(context);
+}
+ConceptualEditor.Item.prototype.getDescription = function(context) {
+    if (this.desc != null)
+        return this.desc.getAbstractSyntax(context);
+    else
+        return this.content.getAbstractSyntax(context);
+}
+
+ConceptualEditor.Option = function() {
+    this.desc  = arguments[0];
+    this.items = [];
+    for (var i = 1; i < arguments.length; i++) {
+        this.items.push(arguments[i]);
+    }
+}
+ConceptualEditor.Option.prototype.getAbstractSyntax = function(context) {
+	var parent  = context.changeParentNode(this);
+	var expr = this.items[context.choose(this)].getAbstractSyntax(context);
 	context.changeParentNode(parent);
 	return expr;
 }
-ConceptualEditor.prototype.getAbstractSyntaxNumeral = function(node,context) {
+ConceptualEditor.Option.prototype.getDescription = function(context) {
+	if (this.desc == null)
+        return null;
+    return this.desc.getAbstractSyntax(context);
+}
+
+ConceptualEditor.Lexicon = function() {
+    this.desc  = arguments[0];
+    this.items = [];
+    for (var i = 1; i < arguments.length; i++) {
+        this.items.push(arguments[i]);
+    }
+}
+ConceptualEditor.Lexicon.prototype.getAbstractSyntax = function(context) {
+	var parent  = context.changeParentNode(this);
+	var expr = this.items[context.choose(this)].getAbstractSyntax(context);
+	context.changeParentNode(parent);
+	return expr;
+}
+ConceptualEditor.Lexicon.prototype.getDescription = function(context) {
+	if (this.desc == null)
+        return null;
+    return this.desc.getAbstractSyntax(context);
+}
+
+ConceptualEditor.Boolean = function(desc,checked,unchecked) {
+    this.desc  = desc;
+    this.items = [checked, unchecked];
+}
+ConceptualEditor.Boolean.prototype.getAbstractSyntax = function(context) {
+	const parent = context.changeParentNode(this);
+    let expr = this.items[context.choose(this)].getAbstractSyntax(context);
+	context.changeParentNode(parent);
+	return expr;
+}
+ConceptualEditor.Boolean.prototype.getDescription = function(context) {
+	if (this.desc == null)
+        return null;
+    return this.desc.getAbstractSyntax(context);
+}
+
+ConceptualEditor.Numeral = function(desc,min,max,def) {
+    this.desc    = desc;
+    this.min     = min;
+    this.max     = max;
+    this.default = def;
+}
+ConceptualEditor.Numeral.prototype.getAbstractSyntax = function(context) {
 	function subs1000(nbr) {
         var syntax = "";
         if (nbr < 100) {
@@ -153,24 +194,41 @@ ConceptualEditor.prototype.getAbstractSyntaxNumeral = function(node,context) {
         return syntax;
     }
 
-	return nbrToSyntax(context.choose(node));
+	return nbrToSyntax(context.choose(this));
 }
-ConceptualEditor.prototype.getAbstractSyntaxCall = function(node,context) {
-	var ref       = this.xmlDoc.getElementById(node.getAttribute("ref"));
-	var arguments = node.childNodes;
+ConceptualEditor.Numeral.prototype.getDescription = function(context) {
+	if (this.desc == null)
+        return null;
+    return this.desc.getAbstractSyntax(context);
+}
 
-	context.push(arguments);
-	var res = this.getAbstractSyntax(ref,context);
+ConceptualEditor.String = function() {
+}
+
+ConceptualEditor.Call = function() {
+    this.ref    = arguments[0];
+    this.arguments = [];
+    for (var i = 1; i < arguments.length; i++) {
+        this.arguments.push(arguments[i]);
+    }
+}
+ConceptualEditor.Call.prototype.getAbstractSyntax = function(context) {
+	var body = context.editor.getDefinitionBody(this.ref);
+	context.push(this.arguments);
+	var res = body.getAbstractSyntax(context);
 	context.pop();
 	return res;
 }
-ConceptualEditor.prototype.getAbstractSyntaxArgument = function(node,context) {
-	var attr = node.getAttribute("index");
-	var index = (attr == null) ? 0 : parseInt(attr);
-	return this.getAbstractSyntax(context.getArgument(index),context);
+
+ConceptualEditor.Argument = function(index) {
+    this.index = index || 0;
+}
+ConceptualEditor.Argument.prototype.getAbstractSyntax = function(context) {
+	return context.getArgument(this.index).getAbstractSyntax(context);
 }
 
-function ChoiceContext() {
+function ChoiceContext(editor) {
+    this.editor  = editor;
 	this.pos     = 0;
 	this.choices = [];
 	this.stack   = [];
@@ -185,7 +243,7 @@ ChoiceContext.prototype.getNodeChoice = function(node) {
 
 	function unlink(node) {
 		for (;;) {
-			var ref = node.getAttribute("ref");
+			var ref = node.ref;
 			if (ref == null)
 				return node;
 		}
@@ -208,10 +266,10 @@ ChoiceContext.prototype.getNodeChoice = function(node) {
 	return choice;
 }
 ChoiceContext.prototype.getDefaultChoice = function(node) {
-	if (node.nodeName == "numeral") {
-		var def = node.getAttribute("default");
+	if (node instanceof ConceptualEditor.Numeral) {
+		var def = node.default;
 		if (def == null) {
-			def = node.getAttribute("min");
+			def = node.min;
 			if (def == null) {
 				def = 1;
 			}
@@ -219,17 +277,17 @@ ChoiceContext.prototype.getDefaultChoice = function(node) {
 		return def;
 	}
 
-	if (node.nodeName != "option" && node.nodeName != "lexicon")
+	if (!(node instanceof ConceptualEditor.Option) && !(node instanceof ConceptualEditor.Lexicon))
 		return 0;
 
-	var default_id     = node.getAttribute("default");
-	var persistence_id = node.getAttribute("persistence_id");
-	var options        = node.childNodes;
+	var default_id     = node.default;
+	var persistence_id = node.persistence_id;
+	var items          = node.items;
 
 	var position = 0;
 	if (default_id != null) {
-		for (var i = 0; i < options.length; i++) {
-			if (default_id == options[i].id) {
+		for (var i = 0; i < items.length; i++) {
+			if (default_id == items[i].id) {
 				position = i;
 				break;
 			}
@@ -243,11 +301,11 @@ ChoiceContext.prototype.getDefaultChoice = function(node) {
 	return position;
 }
 ChoiceContext.prototype.getDefaultLiteral = function(node) {
-	if (node.nodeName != "string")
+	if (!(node instanceof ConceptualEditor.String))
 		return null;
 
-	var default_value  = node.getAttribute("default");
-	var persistence_id = node.getAttribute("persistence_id");
+	var default_value  = node.default;
+	var persistence_id = node.persistence_id;
 
 	if (persistence_id != null) {
 		default_value = this.getString(persistence_id, default_value);
@@ -291,5 +349,5 @@ SyntacticChoice.prototype.getNode = function() {
 	return this.node;
 }
 SyntacticChoice.prototype.getOptions = function() {
-	return this.node.childNodes;
+	return this.node.items;
 }

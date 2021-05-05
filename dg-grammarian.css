@@ -3,6 +3,7 @@ td.phrases {
 }
 td.phrases > table > tr:hover {
 	background: #f0f0f0;
+    cursor: pointer;
 }
 td.phrases > table > tr.current {
 	background: white;
@@ -12,6 +13,10 @@ td.workarea {
 	background: white;
 	padding-left: 10px;
 	padding-right: 10px;
+}
+
+td.workarea .result {
+    margin: auto;
 }
 
 .lexicon-select {
