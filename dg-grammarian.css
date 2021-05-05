@@ -92,8 +92,9 @@ div.wn_search {
 	left: 0em;
 	right: 0em;
 	bottom: 0em;
-	margin: 2em;
-	border: 1px solid #ccc;
+	margin: 8px;
+	padding: 8px;
+	border: 1px solid black;
 	background-color: #f3f3f3;
 	position: fixed;
 	min-width: 790px;

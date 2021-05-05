@@ -33,7 +33,17 @@ dg_grammarian = {};
     Blockly.utils.object.inherits(SynsetField, Blockly.Field);
 
     SynsetField.prototype.showEditor_ = function() {
-        search = div_class("wn_search",[text("x")]);
+        const edt = node("input", {type: "text", style: "width: 50em"}, []);
+        const parseBtn = node("input", {type: "button", value: "Parse"}, []);
+        const doneBtn  = node("input", {type: "button", style: "float: right", value: "Done"}, []);
+        const linearization = node("td", {colspan: 2}, []);
+        const table = node("table", {}, [tr([td(edt),td(parseBtn),node("td",{style: "width: 100%"},[doneBtn])])
+                                        ,tr(linearization)]);
+        const search = div_class("wn_search",[table]);
+
+        parseBtn.addEventListener("click", function(e) {
+                dg_grammarian.parse(edt.value, linearization);
+            });
         document.body.appendChild(search);
     };
 
@@ -528,7 +538,7 @@ dg_grammarian = {};
     };
 })();
 
-dg_grammarian.parse = function (sentence, linearization, choices) {
+dg_grammarian.parse = function (sentence, linearization) {
 	function collect_info(fid,state) {
 		if (fid in state.fids)
 			return;
@@ -707,7 +717,6 @@ dg_grammarian.parse = function (sentence, linearization, choices) {
 	}
 	function extract_parse(result) {
 		clear(linearization);
-		clear(choices);
 
 		if (!("roots" in result[0])) {
 			return;
