@@ -44,6 +44,9 @@ dg_grammarian = {};
         parseBtn.addEventListener("click", function(e) {
                 dg_grammarian.parse(edt.value, linearization);
             });
+        doneBtn.addEventListener("click", function(e) {
+                search.parentNode.removeChild(search);
+            });
         document.body.appendChild(search);
     };
 
