@@ -82,9 +82,11 @@ dg_grammarian = {};
                     }
                     if (d > 0 && e.childNodes.length > 0) str += ")";
                 } else if (e.tagName == "argument") {
-                    if (str != null) {
+                    if (str != "") {
                         const no = e.getAttribute("no");
-                        block.appendValueInput("arg "+no).appendField(str);
+                        const field = new Blockly.FieldLabel(str);
+                        field.maxDisplayLength = 1000;
+                        block.appendValueInput("arg "+no).appendField(field);
                         str = "";
                     }
                 } else if (e.tagName == "string") {
@@ -98,8 +100,10 @@ dg_grammarian = {};
                 }
             }
             applyMutation(xmlElement.firstChild,0);
-            if (str != null) {
-                block.appendDummyInput().appendField(str);
+            if (str != "") {
+                const field = new Blockly.FieldLabel(str);
+                field.maxDisplayLength = 1000;
+                block.appendDummyInput().appendField(field);
             }
 
             this.xml_template = xmlElement.firstChild.cloneNode(true);
