@@ -10,48 +10,6 @@ dg_grammarian = {};
     Blockly.HSV_SATURATION = 0.77;
     Blockly.HSV_VALUE      = 0.93;
 
-    const SynsetField = function(opt_value, opt_validator) {
-        opt_value = this.doClassValidation_(opt_value);
-        if (opt_value == null)
-            opt_value = "<function>";
-        SynsetField.superClass_.constructor.call(
-                                      this, opt_value, opt_validator);
-        this.SERIALIZABLE = true;
-    };
-    SynsetField.fromJson = function(options) {
-        const value = Blockly.utils.replaceMessageReferences(options['value']);
-        return new SynsetField(value);
-    };
-    SynsetField.prototype.toXml = function(fieldElement) {
-        fieldElement.textContent = this.value_;
-        return fieldElement;
-    };
-    SynsetField.prototype.fromXml = function(fieldElement) {
-        var value = fieldElement.textContent;
-        this.setValue(value);
-    };
-    Blockly.utils.object.inherits(SynsetField, Blockly.Field);
-
-    SynsetField.prototype.showEditor_ = function() {
-        const edt = node("input", {type: "text", style: "width: 50em"}, []);
-        const parseBtn = node("input", {type: "button", value: "Parse"}, []);
-        const doneBtn  = node("input", {type: "button", style: "float: right", value: "Done"}, []);
-        const linearization = node("td", {colspan: 2}, []);
-        const table = node("table", {}, [tr([td(edt),td(parseBtn),node("td",{style: "width: 100%"},[doneBtn])])
-                                        ,tr(linearization)]);
-        const search = div_class("wn_search",[table]);
-
-        parseBtn.addEventListener("click", function(e) {
-                dg_grammarian.parse(edt.value, linearization);
-            });
-        doneBtn.addEventListener("click", function(e) {
-                search.parentNode.removeChild(search);
-            });
-        document.body.appendChild(search);
-    };
-
-    Blockly.fieldRegistry.register("field_wn_synset", SynsetField);
-
     let arity_mutator = {
         mutationToDom: function() {
             let arity = 0;
@@ -95,6 +53,65 @@ dg_grammarian = {};
         }
     };
     Blockly.Extensions.registerMutator("dg_desc_mutator", desc_mutator);
+
+    const dg_abstract_syntax_mutator = {
+        mutationToDom: function() {
+            let arity = 0;
+            for (;;arity++) {
+                const inp = this.getInput("arg "+arity);
+                if (inp == null)
+                    break;
+            }
+            if (arity > 0) {
+                const container = document.createElement('mutation');
+                container.appendChild(this.xml_template.cloneNode(true));
+                return container;
+            }
+            return null;
+        },
+        domToMutation: function(xmlElement) {
+            var str = "";
+            var block = this;
+            function applyMutation(e,d) {
+                if (e.tagName == "function") {
+                    if (d > 0 && e.childNodes.length > 0) str += "(";
+                    str += e.getAttribute("name");
+                    for (let i = 0; i < e.childNodes.length; i++) {
+                        str += " ";
+                        applyMutation(e.childNodes[i],1);
+                    }
+                    if (d > 0 && e.childNodes.length > 0) str += ")";
+                } else if (e.tagName == "argument") {
+                    if (str != null) {
+                        const no = e.getAttribute("no");
+                        block.appendValueInput("arg "+no).appendField(str);
+                        str = "";
+                    }
+                } else if (e.tagName == "string") {
+                    str += "\"";
+                    for (var i in e.textContent) {
+                        if (e.textContent[i] == '"')
+                            str += '\\';
+                        str += e.textContent[i];
+                    }
+                    str += "\"";
+                }
+            }
+            applyMutation(xmlElement.firstChild,0);
+            if (str != null) {
+                block.appendDummyInput().appendField(str);
+            }
+
+            this.xml_template = xmlElement.firstChild.cloneNode(true);
+        }
+    };
+    const dg_abstract_syntax_mutator_helper = function() {
+      this.setMutator(new dg_grammarian.AbstractSyntaxMutator());
+    };
+    Blockly.Extensions.registerMutator(
+        "dg_abstract_syntax_mutator",
+        dg_abstract_syntax_mutator,
+        dg_abstract_syntax_mutator_helper);
 
     function sequenceToCode(block, name) {
         let code = "";
@@ -180,32 +197,33 @@ dg_grammarian = {};
     Blockly.Blocks['ConceptualEditor.Function'] = {
       init: function() {
         this.jsonInit({
-          "message0": '%1',
-          "args0": [
-            {
-              "type": "field_wn_synset",
-              "name": "name"
-            }
-          ],
           "output": "abstract_syntax",
           "inputsInline": true,
           "colour": 200,
-          "mutator": "dg_arity_mutator",
-          "tooltip": "Applies a function to a number of arguments"
+          "mutator": "dg_abstract_syntax_mutator",
+          "tooltip": "Generates a new phrase from zero or more arguments"
         });
       }
     };
     Blockly.JavaScript["ConceptualEditor.Function"] = function(block) {
-        let code = "new ConceptualEditor.Function(";
-        
-        code += Blockly.JavaScript.quote_(block.getFieldValue('name'));
-        for (let i = 0; ;i++) {
-            let arg_code = Blockly.JavaScript.valueToCode(block, 'arg '+i, Blockly.JavaScript.ORDER_NONE);
-            if (arg_code == null || arg_code == "")
-                break;
-            code += ", "+arg_code;
-        }
-        code += ")";
+        function generate(e) {
+            if (e.tagName == "function") {
+                let code = "new ConceptualEditor.Function(";
+                code += Blockly.JavaScript.quote_(e.getAttribute("name"));
+                for (let i = 0; i < e.childNodes.length; i++) {
+                    code += ", "+generate(e.childNodes[i]);
+                }
+                code += ")";
+                return code;
+            } else if (e.tagName == "argument") {
+                const no = e.getAttribute("no");
+                return Blockly.JavaScript.valueToCode(block, 'arg '+no, Blockly.JavaScript.ORDER_NONE);
+            } else if (e.tagName == "string") {
+                return Blockly.JavaScript.quote_(e.textContent);
+            }
+        };
+
+        var code = generate(this.xml_template);
         return [code, Blockly.JavaScript.ORDER_NONE];
     };
 
@@ -413,7 +431,7 @@ dg_grammarian = {};
           "previousStatement": null,
           "nextStatement": null,
           "colour": 230,
-          "tooltip": "Checks for an instance of a given WordNet class",
+          "tooltip": "Defines an alternative in a list of options",
         });
       }
     };
@@ -505,7 +523,7 @@ dg_grammarian = {};
             {
               "type": "field_number",
               "precision": 0,
-              "name": "arg_no",
+              "name": "no",
               "value": 0,
               "spellcheck": false
             }
@@ -519,27 +537,55 @@ dg_grammarian = {};
     Blockly.JavaScript["ConceptualEditor.Argument"] = function(block) {
         const code =
             "new ConceptualEditor.Argument("+
-            Blockly.JavaScript.quote_(""+block.getFieldValue("arg_no"))+
+            Blockly.JavaScript.quote_(""+block.getFieldValue("no"))+
             ")";
         return [code, Blockly.JavaScript.ORDER_NONE];
     };
-
-    Blockly.Blocks['ConceptualEditor.InstanceOf'] = {
-      init: function() {
-        this.jsonInit({
-          "message0": 'instance of %1',
-          "args0": [
-            {
-              "type": "field_wn_synset"
-            }
-          ],
-          "output": "Boolean",
-          "colour": 100,
-          "tooltip": "Checks for an instance of a given WordNet class",
-        });
-      }
-    };
 })();
+
+dg_grammarian.AbstractSyntaxMutator = function(quarkNames) {
+  dg_grammarian.AbstractSyntaxMutator.superClass_.constructor.call(this, quarkNames);
+};
+Blockly.utils.object.inherits(dg_grammarian.AbstractSyntaxMutator, Blockly.Mutator);
+dg_grammarian.AbstractSyntaxMutator.prototype.setVisible = function(visible) {
+    let search = this.getSearchPopup();
+
+    if (visible == (search != null)) {
+        // No change.
+        return;
+    }
+    Blockly.Events.fire(new (Blockly.Events.get(Blockly.Events.BUBBLE_OPEN))(
+                                this.block_, visible, 'mutator'));
+    if (visible) {
+        const edt = node("input", {type: "text", style: "width: 50em"}, []);
+        const parseBtn = node("input", {type: "button", value: "Parse"}, []);
+        const doneBtn  = node("input", {type: "button", style: "float: right", value: "Done"}, []);
+        const linearization = node("td", {colspan: 2}, []);
+        const table = node("table", {}, [tr([td(edt),td(parseBtn),node("td",{style: "width: 100%"},[doneBtn])])
+                                        ,tr(linearization)]);
+        search = div_class("wn_search",[table]);
+
+        parseBtn.addEventListener("click", function(e) {
+                dg_grammarian.parse(edt.value, linearization);
+            });
+        doneBtn.addEventListener("click", function(e) {
+                search.parentNode.removeChild(search);
+            });
+        document.body.appendChild(search);
+    } else {
+        search.parentNode.removeChild(search);
+    }
+}
+dg_grammarian.AbstractSyntaxMutator.prototype.isVisible = function() {
+    return this.getSearchPopup() != null;
+};
+dg_grammarian.AbstractSyntaxMutator.prototype.getSearchPopup = function() {
+    const items = document.getElementsByClassName("wn_search");
+    if (items && items.length > 0) {
+        return items[0];
+    }
+    return null;
+};
 
 dg_grammarian.parse = function (sentence, linearization) {
 	function collect_info(fid,state) {
