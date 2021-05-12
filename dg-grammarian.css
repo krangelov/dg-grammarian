@@ -61,6 +61,7 @@ td.workarea .result {
 div.syntax {
 	border-bottom: 1px solid #66c;
 	border-radius: 5px;
+    margin: 1px;
 }
 
 table.result tr.syntax td {
@@ -85,6 +86,24 @@ table.result tr.syntax td:last-child {
 
 div.selected_bracket {
 	font-weight: bold;
+}
+
+.argument_bracket {
+    border: 1px solid #5FD25F;
+    padding: 3px;
+}
+
+.argument_bracket {
+    border: 1px solid #5FD25F;
+    padding: 3px;
+}
+
+div.argument_bracket {
+    border-bottom: 1px solid #5FD25F;
+}
+
+span.argument_bracket {
+    display: inline-block;
 }
 
 div.wn_search {

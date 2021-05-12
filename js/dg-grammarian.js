@@ -929,13 +929,18 @@ dg_grammarian.AbstractSyntaxEditor.onmouseenter_bracket = function(cell,fid,stat
 		gfwordnet.popup.parentNode.removeChild(gfwordnet.popup);
 		gfwordnet.popup = null;
 	}
+    gfwordnet.popup = div_class("floating",[]);
+    cell.appendChild(gfwordnet.popup);
 
 	if (info.prods.length > 1) {
 		const btn = img("edit.png");
 		btn.addEventListener("click", function (e) {dg_grammarian.AbstractSyntaxEditor.onclick_edit(cell,fid,state)});
-		gfwordnet.popup = div_class("floating",[btn]);
-		cell.appendChild(gfwordnet.popup);
+		gfwordnet.popup.appendChild(btn);
 	}
+
+    const btn = img(info.is_argument ? "no-argument.png" : "argument.png");
+    btn.addEventListener("click", function (e) {dg_grammarian.AbstractSyntaxEditor.onclick_turn_argument(cell,fid,state)});
+    gfwordnet.popup.appendChild(btn);
 }
 dg_grammarian.AbstractSyntaxEditor.onmouseout_bracket = function(cell,state) {
 	clear(cell.parentNode.parentNode.firstElementChild);
@@ -990,8 +995,34 @@ dg_grammarian.AbstractSyntaxEditor.onclick_edit = function(bracket,fid,state) {
 	bracket.appendChild(text("\xA0"));
 	bracket.appendChild(btn);
 
-	if (gfwordnet.popup != null)
-		gfwordnet.popup.parentNode.removeChild(gfwordnet.popup);
+	gfwordnet.popup.parentNode.removeChild(gfwordnet.popup);
+    gfwordnet.popup = null;
+}
+dg_grammarian.AbstractSyntaxEditor.onclick_turn_argument = function(bracket,fid,state) {
+	const row   = bracket.parentNode.parentNode;
+	const table = row.parentNode;
+    const info  = state.chart[fid];
+
+    info.is_argument = !info.is_argument;
+
+    function mark(element,fid) {
+		let child = element.firstElementChild;
+		while (child != null) {
+			if (info.traverse_fid == child.dataset.fid) {
+                if (info.is_argument)
+                    child.classList.add("argument_bracket");
+                else
+                    child.classList.remove("argument_bracket");
+            }
+			mark(child,fid);
+			child = child.nextElementSibling;
+		}
+	}
+
+	mark(table,fid);
+
+   	gfwordnet.popup.parentNode.removeChild(gfwordnet.popup);
+    gfwordnet.popup = null;
 }
 dg_grammarian.AbstractSyntaxEditor.onchange_production = function(fid,state,i) {
 	const info = state.chart[fid];
