@@ -29,9 +29,10 @@ ConceptualEditor.Sentence.prototype.getAbstractSyntax = function(context) {
 	return expr;
 }
 ConceptualEditor.Sentence.prototype.getDesciption = function(context) {
-	var expr = this.desc.getAbstractSyntax(context);
-	context.trim();
-	return expr;
+    if (this.desc != null)
+        return this.desc.getAbstractSyntax(context);
+    else
+        return this.content.getAbstractSyntax(context);
 }
 
 ConceptualEditor.Function = function() {
@@ -202,7 +203,11 @@ ConceptualEditor.Numeral.prototype.getDescription = function(context) {
     return this.desc.getAbstractSyntax(context);
 }
 
-ConceptualEditor.String = function() {
+ConceptualEditor.String = function(str) {
+    this.str = str;
+}
+ConceptualEditor.String.prototype.getAbstractSyntax = function(context) {
+	return JSON.stringify(this.str);
 }
 
 ConceptualEditor.Call = function() {

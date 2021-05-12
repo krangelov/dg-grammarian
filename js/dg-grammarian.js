@@ -69,6 +69,11 @@ dg_grammarian = {};
             }
             return null;
         },
+        clearAllInputs: function() {
+            while (this.inputList.length > 0) {
+                this.removeInput(this.inputList[0].name);
+            }
+        },
         domToMutation: function(xmlElement) {
             var str = "";
             var block = this;
@@ -90,13 +95,7 @@ dg_grammarian = {};
                         str = "";
                     }
                 } else if (e.tagName == "string") {
-                    str += "\"";
-                    for (var i in e.textContent) {
-                        if (e.textContent[i] == '"')
-                            str += '\\';
-                        str += e.textContent[i];
-                    }
-                    str += "\"";
+                    str += JSON.stringify(e.textContent);
                 }
             }
             applyMutation(xmlElement.firstChild,0);
@@ -110,7 +109,7 @@ dg_grammarian = {};
         }
     };
     const dg_abstract_syntax_mutator_helper = function() {
-      this.setMutator(new dg_grammarian.AbstractSyntaxMutator());
+      this.setMutator(new dg_grammarian.AbstractSyntaxEditor());
     };
     Blockly.Extensions.registerMutator(
         "dg_abstract_syntax_mutator",
@@ -223,7 +222,7 @@ dg_grammarian = {};
                 const no = e.getAttribute("no");
                 return Blockly.JavaScript.valueToCode(block, 'arg '+no, Blockly.JavaScript.ORDER_NONE);
             } else if (e.tagName == "string") {
-                return Blockly.JavaScript.quote_(e.textContent);
+                return "new ConceptualEditor.String("+Blockly.JavaScript.quote_(e.textContent)+")";
             }
         };
 
@@ -547,11 +546,11 @@ dg_grammarian = {};
     };
 })();
 
-dg_grammarian.AbstractSyntaxMutator = function(quarkNames) {
-  dg_grammarian.AbstractSyntaxMutator.superClass_.constructor.call(this, quarkNames);
+dg_grammarian.AbstractSyntaxEditor = function(quarkNames) {
+  dg_grammarian.AbstractSyntaxEditor.superClass_.constructor.call(this, quarkNames);
 };
-Blockly.utils.object.inherits(dg_grammarian.AbstractSyntaxMutator, Blockly.Mutator);
-dg_grammarian.AbstractSyntaxMutator.prototype.setVisible = function(visible) {
+Blockly.utils.object.inherits(dg_grammarian.AbstractSyntaxEditor, Blockly.Mutator);
+dg_grammarian.AbstractSyntaxEditor.prototype.setVisible = function(visible) {
     let search = this.getSearchPopup();
 
     if (visible == (search != null)) {
@@ -564,15 +563,31 @@ dg_grammarian.AbstractSyntaxMutator.prototype.setVisible = function(visible) {
         const edt = node("input", {type: "text", style: "width: 50em"}, []);
         const parseBtn = node("input", {type: "button", value: "Parse"}, []);
         const doneBtn  = node("input", {type: "button", style: "float: right", value: "Done"}, []);
+        const spanNode = node("span", {style: "float: right"}, [text("\xa0\xa0")])
+        const cancelBtn  = node("input", {type: "button", style: "float: right", value: "Cancel"}, []);
         const linearization = node("td", {colspan: 2}, []);
-        const table = node("table", {}, [tr([td(edt),td(parseBtn),node("td",{style: "width: 100%"},[doneBtn])])
+        const table = node("table", {}, [tr([td(edt),td(parseBtn),node("td",{style: "width: 100%"},[cancelBtn,spanNode,doneBtn])])
                                         ,tr(linearization)]);
         search = div_class("wn_search",[table]);
 
-        parseBtn.addEventListener("click", function(e) {
-                dg_grammarian.parse(edt.value, linearization);
+        parseBtn.addEventListener("click", (e) => {
+                this.parse(edt.value, linearization);
+                doneBtn.disabled = false;
             });
-        doneBtn.addEventListener("click", function(e) {
+        doneBtn.disabled = true;
+        doneBtn.addEventListener("click", (e) => {
+                if (this.state != null) {
+                    const xmlDoc = document.implementation.createDocument(null,null);
+                    const mutElem = xmlDoc.createElement("mutation");
+                    this.block_.xml_template =
+                        this.state.createXmlTemplate(xmlDoc,this.state.root);
+                    mutElem.appendChild(this.block_.xml_template);
+                    this.block_.clearAllInputs();
+                    this.block_.domToMutation(mutElem);
+                }
+                search.parentNode.removeChild(search);
+            });
+        cancelBtn.addEventListener("click", (e) => {
                 search.parentNode.removeChild(search);
             });
         document.body.appendChild(search);
@@ -580,18 +595,17 @@ dg_grammarian.AbstractSyntaxMutator.prototype.setVisible = function(visible) {
         search.parentNode.removeChild(search);
     }
 }
-dg_grammarian.AbstractSyntaxMutator.prototype.isVisible = function() {
+dg_grammarian.AbstractSyntaxEditor.prototype.isVisible = function() {
     return this.getSearchPopup() != null;
 };
-dg_grammarian.AbstractSyntaxMutator.prototype.getSearchPopup = function() {
+dg_grammarian.AbstractSyntaxEditor.prototype.getSearchPopup = function() {
     const items = document.getElementsByClassName("wn_search");
     if (items && items.length > 0) {
         return items[0];
     }
     return null;
 };
-
-dg_grammarian.parse = function (sentence, linearization) {
+dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, linearization) {
 	function collect_info(fid,state) {
 		if (fid in state.fids)
 			return;
@@ -780,32 +794,32 @@ dg_grammarian.parse = function (sentence, linearization) {
 
 		result[0].current = 0;
 		for (let i in roots) {
-			let state = { offsets: []
-				        , fids: {}
-				        , levels: [[roots[i]]]
-				        , root: roots[i]
-				        , chart: chart
-				        , traverse_fid: 0
-				        };
+			this.state = { offsets: []
+				         , fids: {}
+				         , levels: [[roots[i]]]
+				         , root: roots[i]
+				         , chart: chart
+				         , traverse_fid: 0
+				         };
 
 			// collect the offsets and initialize the current fields
-			collect_info(state.root,state);
-			if (state.offsets.length > 0) {
+			collect_info(this.state.root,this.state);
+			if (this.state.offsets.length > 0) {
 				// build sorted list with unique offsets
-				state.offsets.sort(function (a, b) { return a - b; });
-				var uniques = [state.offsets[0]];
-				for (let i = 1; i < state.offsets.length; i++) {
-					if (state.offsets[i-1] !== state.offsets[i]) {
-						uniques.push(state.offsets[i]);
+				this.state.offsets.sort(function (a, b) { return a - b; });
+				var uniques = [this.state.offsets[0]];
+				for (let i = 1; i < this.state.offsets.length; i++) {
+					if (this.state.offsets[i-1] !== this.state.offsets[i]) {
+						uniques.push(this.state.offsets[i]);
 					}
 				}
-				state.offsets = uniques
+				this.state.offsets = uniques
 			}
 
-			state.colspan = function(i,j) {
+			this.state.colspan = function(i,j) {
 				return this.offsets.indexOf(j)-this.offsets.indexOf(i);
 			}
-			state.build_level = function(level,editable) {
+			this.state.build_level = function(level,editable) {
 				let brackets = []
 				for (let j in level) {
 					brackets.push(...this.chart[level[j]].brackets);
@@ -834,11 +848,11 @@ dg_grammarian.parse = function (sentence, linearization) {
 						if (end < bracket.start)
 							row.appendChild(node("td",{colspan: this.colspan(end,bracket.start)}
 													 ,[]));
-						const cell = node("div",{class:"syntax"},[text(state.chart[bracket.fid].cat)]);
+						const cell = node("div",{class:"syntax"},[text(this.chart[bracket.fid].cat)]);
 						if (editable) {
 							cell.dataset.fid = this.chart[bracket.fid].traverse_fid;
-							cell.addEventListener("mouseenter",function(e) { dg_grammarian.onmouseenter_bracket(cell, bracket.fid, state); });
-							cell.addEventListener("mouseout",dg_grammarian.onmouseout_bracket);
+							cell.addEventListener("mouseenter",(e) => { dg_grammarian.AbstractSyntaxEditor.onmouseenter_bracket(cell, bracket.fid, this); });
+							cell.addEventListener("mouseout",(e) => { dg_grammarian.AbstractSyntaxEditor.onmouseout_bracket(cell, this); });
 						}
 						row.appendChild(node("td",{colspan: this.colspan(bracket.start,bracket.end)},[cell]));
 						end = bracket.end;
@@ -850,7 +864,7 @@ dg_grammarian.parse = function (sentence, linearization) {
 					return null;
 				}
 			}
-			state.getAbstractSyntax = function(fid,level) {
+			this.state.getAbstractSyntax = function(fid,level) {
 				var info = this.chart[fid];
 				if (level+1 >= this.levels.length)
 					this.levels.push([])
@@ -858,11 +872,11 @@ dg_grammarian.parse = function (sentence, linearization) {
 				const prod = info.prods[info.current];
 				let   tree = prod.tree;
 				if (prod.args.length > 0) {
-					for (var j in prod.args) {
+					for (let arg of prod.args) {
 						const subtree =
-						    this.getAbstractSyntax(prod.args[j],level+1,fid);
+						    this.getAbstractSyntax(arg,level+1);
 						tree += " "+subtree;
-						this.levels[level+1].push(prod.args[j]);
+						this.levels[level+1].push(arg);
 					}
 					tree = "("+tree+")";
 				}
@@ -871,7 +885,21 @@ dg_grammarian.parse = function (sentence, linearization) {
 
 				return tree;
 			}
-			state.update_ui = function() {
+			this.state.createXmlTemplate = function(xmlDoc,fid) {
+				var info = this.chart[fid];
+                const prod = info.prods[info.current];
+
+                const funElem = xmlDoc.createElement("function");
+                funElem.setAttribute("name", prod.tree);
+                for (let arg of prod.args) {
+                    const childElem =
+                        this.createXmlTemplate(xmlDoc,arg);
+                    funElem.appendChild(childElem);
+				}
+
+				return funElem;
+			}
+            this.state.update_ui = function() {
 				// initialize the levels and extract an abstract syntax tree
 				this.levels.length = 1;
 				this.traverse_fid  = 0;
@@ -881,12 +909,96 @@ dg_grammarian.parse = function (sentence, linearization) {
 				const tree = this.getAbstractSyntax(this.root,0);
 				gfwordnet.grammar_call("command=c-bracketedLinearize&to="+gfwordnet.selection.langs_list.join("%20")+"&tree="+encodeURIComponent(tree),bind(extract_linearization,this));
 			}
-			
-			state.update_ui();
+
+			this.state.update_ui();
 		}
 	}
-	gfwordnet.grammar_call("command=c-parseToChart&limit=1&from="+gfwordnet.selection.current+"&input="+encodeURIComponent(sentence),extract_parse);
+	gfwordnet.grammar_call("command=c-parseToChart&limit=1&from="+gfwordnet.selection.current+"&input="+encodeURIComponent(sentence),extract_parse.bind(this));
 }
+dg_grammarian.AbstractSyntaxEditor.onmouseenter_bracket = function(cell,fid,state) {
+	if (cell.firstElementChild != null) {
+		// if there is a button already
+		return;
+	}
+
+	const info = state.chart[fid];
+
+	cell.parentNode.parentNode.firstElementChild.innerText = info.prods[info.current].tree;
+
+	if (gfwordnet.popup != null && gfwordnet.popup.parentNode != null) {
+		gfwordnet.popup.parentNode.removeChild(gfwordnet.popup);
+		gfwordnet.popup = null;
+	}
+
+	if (info.prods.length > 1) {
+		const btn = img("edit.png");
+		btn.addEventListener("click", function (e) {dg_grammarian.AbstractSyntaxEditor.onclick_edit(cell,fid,state)});
+		gfwordnet.popup = div_class("floating",[btn]);
+		cell.appendChild(gfwordnet.popup);
+	}
+}
+dg_grammarian.AbstractSyntaxEditor.onmouseout_bracket = function(cell,state) {
+	clear(cell.parentNode.parentNode.firstElementChild);
+}
+dg_grammarian.AbstractSyntaxEditor.onclick_edit = function(bracket,fid,state) {
+	const row   = bracket.parentNode.parentNode;
+	const table = row.parentNode;
+	const info  = state.chart[fid];
+
+	let prev = row.previousElementSibling;
+	while (prev != null) {
+		if (prev.previousElementSibling.className != "syntax")
+			break;
+
+		let colspan = 0;
+		let cell    = prev.firstElementChild.nextElementSibling;
+		while (cell != null) {
+			let start = state.offsets[colspan];
+			let end   = state.offsets[colspan + cell.colSpan];
+
+			for (let i in info.brackets) {
+				const bracket = info.brackets[i];
+
+				if (start >= bracket.start && end <= bracket.end) {
+					clear(cell);
+					cell.className = "";
+					break;
+				}
+			}
+
+			colspan += cell.colSpan;
+			cell = cell.nextElementSibling;
+		}
+
+		prev = prev.previousElementSibling;
+	}
+
+
+	for (let i in info.prods) {
+		const prod = info.prods[i];
+
+		const choice_row = state.build_level(prod.args,false);
+		const edit = node("input", {type: "radio", name:"choice"+fid}, []);
+		edit.checked = (i == info.current);
+		edit.addEventListener("change", (e) => { dg_grammarian.AbstractSyntaxEditor.onchange_production(fid,state,i); });
+		choice_row.firstElementChild.appendChild(node("label", {}, [edit, text(prod.tree)]));
+		table.insertBefore(choice_row,row);
+	}
+	
+	const btn = node("span", {style: "cursor: pointer"}, [text("\u2715")]);
+	btn.addEventListener("click", function(e) { state.update_ui(); });
+	bracket.appendChild(text("\xA0"));
+	bracket.appendChild(btn);
+
+	if (gfwordnet.popup != null)
+		gfwordnet.popup.parentNode.removeChild(gfwordnet.popup);
+}
+dg_grammarian.AbstractSyntaxEditor.onchange_production = function(fid,state,i) {
+	const info = state.chart[fid];
+	info.current = i;
+	state.update_ui();
+}
+
 dg_grammarian.linearize_ui = function(tree,cell) {
 	if (this.lin_cache == null || this.lin_cache.lang != gfwordnet.selection.current) {
 		this.lin_cache = {lang: gfwordnet.selection.current, lins: {}};
@@ -923,24 +1035,10 @@ dg_grammarian.load_phrases = function(url, phrases, from, blocklyDiv, toolbox) {
     };
     window.addEventListener('resize', onresize, false);
 
-    function init_phrases() {
-        clear(phrases);
-        const sentences = dg_grammarian.editor.getSentences();
-        for (let i = 0; i < sentences.length; i++) {
-            const cell = td([]);
-            cell.addEventListener("click", function(e) {
-                    dg_grammarian.onclick_sentence(this.parentNode, sentences[i]);
-                });
-            const context = new ChoiceContext(dg_grammarian.editor);
-            dg_grammarian.linearize_ui(sentences[i].getDesciption(context),cell);
-            phrases.appendChild(tr(cell));
-        }
-    };
-
     from.addEventListener("multisel_changed", function(e) {
         gfwordnet.selection = e.selection;
         if (e.new_current) {
-            init_phrases();
+            dg_grammarian.init_phrases(phrases);
         }
         if (dg_grammarian.context != null) {
             dg_grammarian.context.reset();
@@ -965,11 +1063,24 @@ dg_grammarian.load_phrases = function(url, phrases, from, blocklyDiv, toolbox) {
 
             dg_grammarian.editor = new ConceptualEditor();
             eval(Blockly.JavaScript.workspaceToCode(dg_grammarian.workspace));
-            init_phrases();
+            dg_grammarian.init_phrases(phrases);
         }
     };
     xhttp.open("GET", url, true);
     xhttp.send();
+}
+dg_grammarian.init_phrases = function(phrases) {
+    clear(phrases);
+    const sentences = dg_grammarian.editor.getSentences();
+    for (let i = 0; i < sentences.length; i++) {
+        const cell = td([]);
+        cell.addEventListener("click", function(e) {
+                dg_grammarian.onclick_sentence(this.parentNode, sentences[i]);
+            });
+        const context = new ChoiceContext(dg_grammarian.editor);
+        dg_grammarian.linearize_ui(sentences[i].getDesciption(context),cell);
+        phrases.appendChild(tr(cell));
+    }
 }
 dg_grammarian.regenerate = function(update_lin,update_choices) {
 	var linearization = element('linearization');
@@ -1190,91 +1301,8 @@ dg_grammarian.onchange_option = function(i,j) {
 	this.context.reset();
 	this.regenerate(true,true);
 }
-dg_grammarian.onmouseenter_bracket = function(cell,fid,state) {
-	if (cell.firstElementChild != null) {
-		// if there is a button already
-		return;
-	}
 
-	const info = state.chart[fid];
-
-	cell.parentNode.parentNode.firstElementChild.innerText = info.prods[info.current].tree;
-
-	if (gfwordnet.popup != null && gfwordnet.popup.parentNode != null) {
-		gfwordnet.popup.parentNode.removeChild(gfwordnet.popup);
-		gfwordnet.popup = null;
-	}
-
-	if (info.prods.length > 1) {
-		const btn = img("edit.png");
-		btn.addEventListener("click", function (e) {dg_grammarian.onclick_edit(cell,fid,state)});
-		gfwordnet.popup = div_class("floating",[btn]);
-		cell.appendChild(gfwordnet.popup);
-	}
-}
-dg_grammarian.onmouseout_bracket = function(e) {
-	clear(this.parentNode.parentNode.firstElementChild);
-}
-dg_grammarian.onclick_edit = function(bracket,fid,state) {
-	const row   = bracket.parentNode.parentNode;
-	const table = row.parentNode;
-	const info  = state.chart[fid];
-
-	let prev = row.previousElementSibling;
-	while (prev != null) {
-		if (prev.previousElementSibling.className != "syntax")
-			break;
-
-		let colspan = 0;
-		let cell    = prev.firstElementChild.nextElementSibling;
-		while (cell != null) {
-			let start = state.offsets[colspan];
-			let end   = state.offsets[colspan + cell.colSpan];
-
-			for (let i in info.brackets) {
-				const bracket = info.brackets[i];
-
-				if (start >= bracket.start && end <= bracket.end) {
-					clear(cell);
-					cell.className = "";
-					break;
-				}
-			}
-
-			colspan += cell.colSpan;
-			cell = cell.nextElementSibling;
-		}
-
-		prev = prev.previousElementSibling;
-	}
-
-
-	for (let i in info.prods) {
-		const prod = info.prods[i];
-
-		const choice_row = state.build_level(prod.args,false);
-		const edit = node("input", {type: "radio", name:"choice"+fid}, []);
-		edit.checked = (i == info.current);
-		edit.addEventListener("change", function (e) { dg_grammarian.onchange_production(fid,state,i); });
-		choice_row.firstElementChild.appendChild(node("label", {}, [edit, text(prod.tree)]));
-		table.insertBefore(choice_row,row);
-	}
-	
-	const btn = node("span", {style: "cursor: pointer"}, [text("\u2715")]);
-	btn.addEventListener("click", function(e) { state.update_ui(); });
-	bracket.appendChild(text("\xA0"));
-	bracket.appendChild(btn);
-	
-	if (gfwordnet.popup != null)
-		gfwordnet.popup.parentNode.removeChild(gfwordnet.popup);
-}
-dg_grammarian.onchange_production = function(fid,state,i) {
-	const info = state.chart[fid];
-	info.current = i;
-	state.update_ui();
-}
-
-dg_grammarian.onedit_rules = function(editBtn, linearization, choices, blocklyDiv) {
+dg_grammarian.onedit_rules = function(editBtn, phrases, linearization, choices, blocklyDiv) {
     if (dg_grammarian.edit_mode) {
         dg_grammarian.edit_mode = false;
         editBtn.value = "Done";
@@ -1290,6 +1318,7 @@ dg_grammarian.onedit_rules = function(editBtn, linearization, choices, blocklyDi
         dg_grammarian.editor.reset();
         eval(Blockly.JavaScript.workspaceToCode(dg_grammarian.workspace));
         dg_grammarian.edit_mode = true;
+        dg_grammarian.init_phrases(phrases);
         editBtn.value = "Edit";
         blocklyDiv.style.display = "none";
     }
