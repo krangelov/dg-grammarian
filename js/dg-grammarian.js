@@ -669,8 +669,9 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
 		}
 	}
 	function onclick_phrase(phrase,state) {
-		let td_cell  = phrase.parentNode;
-		let selected = phrase.classList.contains("selected_bracket");
+        const td_cell  = phrase.parentNode;
+        const table    = td_cell.parentNode.parentNode;
+        const selected = table.querySelector("div.syntax.selected_bracket");
 
 		let start   = null;
 		let end     = null;
@@ -706,31 +707,36 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
 			cell = cell.nextElementSibling;
 		}
 
+        let selected_fid = null;
 		let brackets = [];
 		for (let fid in state.chart) {
 			let info = state.chart[fid];
 			if (info.traverse_fid != null) {
-				for (let i in info.brackets) {
-					const bracket = info.brackets[i];
+				for (let bracket of info.brackets) {
 					if (bracket.start <= start && bracket.end >= end) {
 						brackets.push(bracket);
+
+                        if (selected && selected.dataset.fid == info.traverse_fid) {
+                            selected_fid = bracket.fid;
+                        }
 					}
 				}
 			}
 		}
 
 		let best = null;
-		if (brackets.length > 0) {
-			brackets.sort(function (a, b) {
-				let cmp = (a.end-a.start) - (b.end-b.start);
-				if (cmp == 0)
-					cmp = state.chart[a.fid].traverse_fid - state.chart[b.fid].traverse_fid;
-			});
+        if (brackets.length > 0) {
+            brackets.sort(function (a, b) {
+                let res = (a.end-a.start) - (b.end-b.start);
+                if (res == 0)
+                    res = state.chart[a.fid].traverse_fid - state.chart[b.fid].traverse_fid;
+                return res;
+            });
 
 			best = brackets[0];
-			if (selected) {
+            if (selected_fid) {
 				for (let i in brackets) {
-					if ((best.end-best.start) < (brackets[i].end-brackets[i].start)) {
+					if (brackets[i].fid > selected_fid) {
 						best = brackets[i];
 						break;
 					}
@@ -750,7 +756,6 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
 			lex_id = info.prods[info.current].tree;
 		}
 
-		const table = td_cell.parentNode.parentNode;
 		bind(select_bracket,state)(table,state.offsets.length,traverse_fid,lex_id);
 	}
 	function extract_linearization(lins) {
@@ -758,7 +763,8 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
 			gfwordnet.build_alignment_table(lins,
 			                                this.offsets.length,
 			                                gfwordnet.selection.current,
-			                                bind(select_bracket,this));
+			                                bind(select_bracket,this),
+                                            true);
 
 		const row = node("tr",{class: "syntax", style: "border-top: 2px solid #66c"}
 		                     ,[th(text(gfwordnet.selection.langs[gfwordnet.selection.current].name))]);
@@ -853,6 +859,13 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
 							cell.dataset.fid = this.chart[bracket.fid].traverse_fid;
 							cell.addEventListener("mouseenter",(e) => { dg_grammarian.AbstractSyntaxEditor.onmouseenter_bracket(cell, bracket.fid, this); });
 							cell.addEventListener("mouseout",(e) => { dg_grammarian.AbstractSyntaxEditor.onmouseout_bracket(cell, this); });
+							cell.addEventListener("click",(e) => {
+                                const info = this.chart[bracket.fid];
+                                const traverse_fid = info.traverse_fid;
+                                const lex_id = info.prods[info.current].tree;
+                                const table = e.target.parentNode.parentNode.parentNode;
+                                bind(select_bracket,this)(table,this.offsets.length,traverse_fid,lex_id);
+                            });
 						}
 						row.appendChild(node("td",{colspan: this.colspan(bracket.start,bracket.end)},[cell]));
 						end = bracket.end;
