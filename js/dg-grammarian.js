@@ -628,8 +628,8 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
 			}
 		}
 	}
-	function select_bracket(table,colspan,fid,lex_id) {
-		gfwordnet.select_bracket(table,colspan,fid,lex_id);
+	function select_bracket(table,colspan,fid,lex_id,frames) {
+		gfwordnet.select_bracket(table,colspan,fid,lex_id,frames);
 
 		if (fid != null) {
 			let row = table.firstElementChild;
@@ -756,11 +756,11 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
 			lex_id = info.prods[info.current].tree;
 		}
 
-		bind(select_bracket,state)(table,state.offsets.length,traverse_fid,lex_id);
+		bind(select_bracket,state)(table,state.offsets.length,traverse_fid,lex_id,[]);
 	}
 	function extract_linearization(lins) {
 		const table =
-			gfwordnet.build_alignment_table(lins,
+			gfwordnet.build_alignment_table(lins,[],
 			                                this.offsets.length,
 			                                gfwordnet.selection.current,
 			                                bind(select_bracket,this),
@@ -864,7 +864,7 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
                                 const traverse_fid = info.traverse_fid;
                                 const lex_id = info.prods[info.current].tree;
                                 const table = e.target.parentNode.parentNode.parentNode;
-                                bind(select_bracket,this)(table,this.offsets.length,traverse_fid,lex_id);
+                                bind(select_bracket,this)(table,this.offsets.length,traverse_fid,lex_id,[]);
                             });
 						}
 						row.appendChild(node("td",{colspan: this.colspan(bracket.start,bracket.end)},[cell]));
@@ -1134,7 +1134,7 @@ dg_grammarian.regenerate = function(update_lin,update_choices) {
 
 	if (update_lin) {
 		function extract_linearization(lins) {
-			const table = gfwordnet.build_alignment_table(lins);
+			const table = gfwordnet.build_alignment_table(lins,[]);
 			clear(linearization);
 			linearization.appendChild(table);
 		}
