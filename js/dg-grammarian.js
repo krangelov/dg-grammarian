@@ -56,21 +56,21 @@ dg_grammarian = {};
 
     const dg_abstract_syntax_mutator = {
         mutationToDom: function() {
-            let arity = 0;
-            for (;;arity++) {
-                const inp = this.getInput("arg "+arity);
-                if (inp == null)
-                    break;
-            }
-            if (arity > 0) {
-                const container = document.createElement('mutation');
-                container.appendChild(this.xml_template.cloneNode(true));
-                return container;
-            }
-            return null;
+            if (this.xml_template == null)
+                return null;
+
+            const container = document.createElement('mutation');
+            container.appendChild(this.xml_template.cloneNode(true));
+            return container;
         },
         clearAllInputs: function() {
             while (this.inputList.length > 0) {
+                if (this.inputList[0].connection != null) {
+                    const target = this.inputList[0].connection.targetBlock();
+                    if (target != null) {
+                        target.dispose();
+                    }
+                }
                 this.removeInput(this.inputList[0].name);
             }
         },
@@ -579,11 +579,17 @@ dg_grammarian.AbstractSyntaxEditor.prototype.setVisible = function(visible) {
                 if (this.state != null) {
                     const xmlDoc = document.implementation.createDocument(null,null);
                     const mutElem = xmlDoc.createElement("mutation");
+                    const children = [];
                     this.block_.xml_template =
-                        this.state.createXmlTemplate(xmlDoc,this.state.root);
+                        this.state.createXmlTemplateAndChildren(xmlDoc,Blockly.getMainWorkspace(),children,this.state.root);
                     mutElem.appendChild(this.block_.xml_template);
+
                     this.block_.clearAllInputs();
                     this.block_.domToMutation(mutElem);
+                    for (let sub of children) {
+                        const input = this.block_.getInput('arg '+sub[0]);
+                        input.connection.connect(sub[1].outputConnection);
+                    }
                 }
                 search.parentNode.removeChild(search);
             });
@@ -597,6 +603,11 @@ dg_grammarian.AbstractSyntaxEditor.prototype.setVisible = function(visible) {
 }
 dg_grammarian.AbstractSyntaxEditor.prototype.isVisible = function() {
     return this.getSearchPopup() != null;
+};
+Blockly.Icon.prototype.setIconLocation=function(a){
+    this.iconXY_=a;
+};
+Blockly.Icon.prototype.applyColour=function(a){
 };
 dg_grammarian.AbstractSyntaxEditor.prototype.getSearchPopup = function() {
     const items = document.getElementsByClassName("wn_search");
@@ -863,7 +874,7 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
                                 const info = this.chart[bracket.fid];
                                 const traverse_fid = info.traverse_fid;
                                 const lex_id = info.prods[info.current].tree;
-                                const table = e.target.parentNode.parentNode.parentNode;
+                                const table = cell.parentNode.parentNode.parentNode;
                                 bind(select_bracket,this)(table,this.offsets.length,traverse_fid,lex_id,[]);
                             });
 						}
@@ -898,19 +909,46 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
 
 				return tree;
 			}
-			this.state.createXmlTemplate = function(xmlDoc,fid) {
-				var info = this.chart[fid];
+			this.state.createXmlTemplateAndChildren = function(xmlDoc,workspace,children,fid) {
+				const info = this.chart[fid];
                 const prod = info.prods[info.current];
 
                 const funElem = xmlDoc.createElement("function");
                 funElem.setAttribute("name", prod.tree);
-                for (let arg of prod.args) {
-                    const childElem =
-                        this.createXmlTemplate(xmlDoc,arg);
-                    funElem.appendChild(childElem);
-				}
+                for (let arg_fid of prod.args) {
+                    if (this.chart[arg_fid].is_argument) {
+                        const childElem =
+                            xmlDoc.createElement("argument");
+                        childElem.setAttribute("no", arg_fid);
+                        funElem.appendChild(childElem);
 
-				return funElem;
+                        const subDoc = document.implementation.createDocument(null,null);
+                        const mutElem = subDoc.createElement("mutation");
+                        const subChildren = [];
+                        const subBlock = workspace.newBlock("ConceptualEditor.Function");
+
+                        subBlock.xml_template =
+                            this.createXmlTemplateAndChildren(subDoc,workspace,subChildren,arg_fid);
+                        mutElem.appendChild(subBlock.xml_template);
+
+                        subBlock.domToMutation(mutElem);
+                        for (let sub of subChildren) {
+                            const input = subBlock.getInput('arg '+sub[0]);
+                            input.connection.connect(sub[1].outputConnection);
+                        }
+
+                        subBlock.initSvg();
+                        subBlock.render();
+
+                        children.push([arg_fid,subBlock]);
+                    } else {
+                        const childElem =
+                            this.createXmlTemplateAndChildren(xmlDoc,workspace,children,arg_fid);
+                        funElem.appendChild(childElem);
+                    }
+                }
+
+                return funElem;
 			}
             this.state.update_ui = function() {
 				// initialize the levels and extract an abstract syntax tree
