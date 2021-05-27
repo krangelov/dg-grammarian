@@ -60,6 +60,7 @@ dg_grammarian = {};
                 return null;
 
             const container = document.createElement('mutation');
+            container.setAttribute("type",dg_grammarian.AbstractSyntaxEditor.getFunctionType(this));
             container.appendChild(this.xml_template.cloneNode(true));
             return container;
         },
@@ -74,7 +75,7 @@ dg_grammarian = {};
                 this.removeInput(this.inputList[0].name);
             }
         },
-        domToMutation: function(xmlElement) {
+        domToMutation: function(container) {
             var str = "";
             var block = this;
             function applyMutation(e,d) {
@@ -87,25 +88,35 @@ dg_grammarian = {};
                     }
                     if (d > 0 && e.childNodes.length > 0) str += ")";
                 } else if (e.tagName == "argument") {
+                    const no = e.getAttribute("no");
+                    const type = e.getAttribute("type");
+
+                    const inp = block.appendValueInput("arg "+no);
+                    inp.connection.setCheck(type);
+
                     if (str != "") {
-                        const no = e.getAttribute("no");
                         const field = new Blockly.FieldLabel(str);
                         field.maxDisplayLength = 1000;
-                        block.appendValueInput("arg "+no).appendField(field);
+                        inp.appendField(field);
+
                         str = "";
                     }
                 } else if (e.tagName == "string") {
                     str += JSON.stringify(e.textContent);
                 }
             }
-            applyMutation(xmlElement.firstChild,0);
+            applyMutation(container.firstChild,0);
             if (str != "") {
                 const field = new Blockly.FieldLabel(str);
                 field.maxDisplayLength = 1000;
                 block.appendDummyInput().appendField(field);
             }
 
-            this.xml_template = xmlElement.firstChild.cloneNode(true);
+            const type = container.getAttribute("type");
+            if (type != null)
+                this.outputConnection.setCheck([type,"abstract_syntax"]);
+
+            this.xml_template = container.firstChild.cloneNode(true);
         }
     };
     const dg_abstract_syntax_mutator_helper = function() {
@@ -248,7 +259,7 @@ dg_grammarian = {};
               "check": "abstract_syntax"
             }
           ],
-          "output": "abstract_syntax",
+          "output": null,
           "colour": 230,
           "tooltip": "Checks for an instance of a given WordNet class",
         });
@@ -289,7 +300,7 @@ dg_grammarian = {};
               "check": "abstract_syntax"
             }
           ],
-          "output": "abstract_syntax",
+          "output": null,
           "colour": 230,
           "tooltip": "Checks for an instance of a given WordNet class",
         });
@@ -340,7 +351,7 @@ dg_grammarian = {};
               "check": "abstract_syntax"
             }
           ],
-          "output": "abstract_syntax",
+          "output": null,
           "colour": 230,
           "tooltip": "Checks for an instance of a given WordNet class",
         });
@@ -394,7 +405,7 @@ dg_grammarian = {};
               "check": "abstract_syntax"
             }
           ],
-          "output": "abstract_syntax",
+          "output": ["abstract_syntax", "Numeral"],
           "colour": 230,
           "tooltip": "Checks for an instance of a given WordNet class",
         });
@@ -499,7 +510,7 @@ dg_grammarian = {};
           ],
           "inputsInline": true,
           "mutator": "dg_arity_mutator",
-          "output": "abstract_syntax",
+          "output": null,
           "colour": 100,
           "tooltip": "Checks for an instance of a given WordNet class",
         });
@@ -531,7 +542,7 @@ dg_grammarian = {};
               "spellcheck": false
             }
           ],
-          "output": "abstract_syntax",
+          "output": null,
           "colour": 100,
           "tooltip": "Checks for an instance of a given WordNet class",
         });
@@ -583,6 +594,7 @@ dg_grammarian.AbstractSyntaxEditor.prototype.setVisible = function(visible) {
                     this.block_.xml_template =
                         this.state.createXmlTemplateAndChildren(xmlDoc,Blockly.getMainWorkspace(),children,this.state.root);
                     mutElem.appendChild(this.block_.xml_template);
+                    mutElem.setAttribute("type", this.state.chart[this.state.root].cat);
 
                     this.block_.clearAllInputs();
                     this.block_.domToMutation(mutElem);
@@ -616,6 +628,13 @@ dg_grammarian.AbstractSyntaxEditor.prototype.getSearchPopup = function() {
     }
     return null;
 };
+dg_grammarian.AbstractSyntaxEditor.getFunctionType = function (block) {
+    for (let check of block.outputConnection.getCheck()) {
+        if (check != "abstract_syntax")
+            return check;
+    }
+    return null;
+}
 dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, linearization) {
 	function collect_info(fid,state) {
 		if (fid in state.fids)
@@ -920,6 +939,7 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
                         const childElem =
                             xmlDoc.createElement("argument");
                         childElem.setAttribute("no", arg_fid);
+                        childElem.setAttribute("type", this.chart[arg_fid]);
                         funElem.appendChild(childElem);
 
                         const subDoc = document.implementation.createDocument(null,null);
@@ -930,6 +950,7 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
                         subBlock.xml_template =
                             this.createXmlTemplateAndChildren(subDoc,workspace,subChildren,arg_fid);
                         mutElem.appendChild(subBlock.xml_template);
+                        mutElem.setAttribute("type", this.chart[arg_fid]);
 
                         subBlock.domToMutation(mutElem);
                         for (let sub of subChildren) {
@@ -964,7 +985,10 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
 			this.state.update_ui();
 		}
 	}
-	gfwordnet.grammar_call("command=c-parseToChart&limit=1&from="+gfwordnet.selection.current+"&input="+encodeURIComponent(sentence),extract_parse.bind(this));
+
+    const startCat =
+        dg_grammarian.AbstractSyntaxEditor.getFunctionType(this.block_);
+	gfwordnet.grammar_call("command=c-parseToChart&limit=1&from="+gfwordnet.selection.current+"&input="+encodeURIComponent(sentence)+((startCat != null) ? "&cat="+startCat : ""),extract_parse.bind(this));
 }
 dg_grammarian.AbstractSyntaxEditor.onmouseenter_bracket = function(cell,fid,state) {
 	if (cell.firstElementChild != null) {
