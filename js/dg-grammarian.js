@@ -466,6 +466,60 @@ dg_grammarian = {};
         return code;
     };
 
+    Blockly.Blocks['ConceptualEditor.Idiom'] = {
+      init: function() {
+        this.jsonInit({
+          "message0": 'Idiom %1',
+          "args0": [
+            {
+              "type": "input_value",
+              "name": "of",
+              "check": null
+            }
+          ],
+          "message1": '%1 %2',
+          "args1": [
+            {
+              "type": "field_dropdown",
+              "name": "languages",
+              "options": [
+                  ["Afrikaans", "ParseAfr"],
+                  ["Bulgarian", "ParseBul"],
+                  ["Catalan",   "ParseCat"],
+                  ["Chinese",   "ParseChi"],
+                  ["Dutch",     "ParseDut"],
+                  ["English",   "ParseEng"],
+                  ["Estonian",  "ParseEst"],
+                  ["Finnish",   "ParseFin"],
+                  ["French",    "ParseFre"],
+                  ["German",    "ParseGer"],
+                  ["Italian",   "ParseIta"],
+                  ["Korean",    "ParseKor"],
+                  ["Maltese",   "ParseMlt"],
+                  ["Polish",    "ParsePol"],
+                  ["Portuguese","ParsePor"],
+                  ["Slovenian", "ParseSlv"],
+                  ["Somali",    "ParseSom"],
+                  ["Spanish",   "ParseSpa"],
+                  ["Swahili",   "ParseSwa"],
+                  ["Swedish",   "ParseSwe"],
+                  ["Thai",      "ParseTha"],
+                  ["Turkish",   "ParseTur"]
+              ]
+            },
+            {
+              "type": "input_value",
+              "name": "of",
+              "check": null
+            }
+          ],
+          "output": "abstract_syntax",
+          "colour": 300,
+          "tooltip": "Checks for an instance of a given WordNet class",
+        });
+      }
+    };
+
     Blockly.Blocks["ConceptualEditor.Definition"] = {
       init: function() {
         this.jsonInit({
