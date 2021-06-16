@@ -60,7 +60,12 @@ dg_grammarian = {};
                 return null;
 
             const container = document.createElement('mutation');
-            container.setAttribute("type",dg_grammarian.AbstractSyntaxEditor.getFunctionType(this));
+            for (let check of this.outputConnection.getCheck()) {
+                if (check != "abstract_syntax") {
+                    container.setAttribute("type",check);
+                    break;
+                }
+            }
             container.appendChild(this.xml_template.cloneNode(true));
             return container;
         },
@@ -438,7 +443,7 @@ dg_grammarian = {};
             {
               "type": "input_value",
               "name": "of",
-              "check": "abstract_syntax"
+              "check": null
             }
           ],
           "mutator": "dg_desc_mutator",
@@ -628,13 +633,6 @@ dg_grammarian.AbstractSyntaxEditor.prototype.getSearchPopup = function() {
     }
     return null;
 };
-dg_grammarian.AbstractSyntaxEditor.getFunctionType = function (block) {
-    for (let check of block.outputConnection.getCheck()) {
-        if (check != "abstract_syntax")
-            return check;
-    }
-    return null;
-}
 dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, linearization) {
 	function collect_info(fid,state) {
 		if (fid in state.fids)
@@ -939,7 +937,7 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
                         const childElem =
                             xmlDoc.createElement("argument");
                         childElem.setAttribute("no", arg_fid);
-                        childElem.setAttribute("type", this.chart[arg_fid]);
+                        childElem.setAttribute("type", this.chart[arg_fid].cat);
                         funElem.appendChild(childElem);
 
                         const subDoc = document.implementation.createDocument(null,null);
@@ -950,7 +948,7 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
                         subBlock.xml_template =
                             this.createXmlTemplateAndChildren(subDoc,workspace,subChildren,arg_fid);
                         mutElem.appendChild(subBlock.xml_template);
-                        mutElem.setAttribute("type", this.chart[arg_fid]);
+                        mutElem.setAttribute("type", this.chart[arg_fid].cat);
 
                         subBlock.domToMutation(mutElem);
                         for (let sub of subChildren) {
@@ -986,8 +984,19 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
 		}
 	}
 
-    const startCat =
-        dg_grammarian.AbstractSyntaxEditor.getFunctionType(this.block_);
+    let startCat = null;
+    if (this.block_.outputConnection.targetConnection != null) {
+        const check =
+            dg_grammarian.ConnectionChecker.up(this.block_.outputConnection.targetConnection);
+        if (check != null) {
+            for (let i in check) {
+                if (check[i] != "abstract_syntax") {
+                    startCat = check[i];
+                    break;
+                }
+            }
+        }
+    }
 	gfwordnet.grammar_call("command=c-parseToChart&limit=1&from="+gfwordnet.selection.current+"&input="+encodeURIComponent(sentence)+((startCat != null) ? "&cat="+startCat : ""),extract_parse.bind(this));
 }
 dg_grammarian.AbstractSyntaxEditor.onmouseenter_bracket = function(cell,fid,state) {
@@ -1105,6 +1114,110 @@ dg_grammarian.AbstractSyntaxEditor.onchange_production = function(fid,state,i) {
 	state.update_ui();
 }
 
+dg_grammarian.ConnectionChecker = function() {
+  dg_grammarian.ConnectionChecker.superClass_.constructor.call(this);
+};
+Blockly.utils.object.inherits(dg_grammarian.ConnectionChecker, Blockly.ConnectionChecker);
+
+// Register the checker so that it can be used by name.
+Blockly.registry.register(
+    Blockly.registry.Type.CONNECTION_CHECKER,
+    "dg_grammarian.ConnectionChecker",
+    dg_grammarian.ConnectionChecker);
+
+dg_grammarian.ConnectionChecker.up = function(a) {
+    let upCheck = a.getCheck();
+    if (upCheck != null)
+        return upCheck;
+
+    if (a.getSourceBlock() == null)
+        return null;
+
+    if (a.getSourceBlock().type == "ConceptualEditor.Item" &&
+        a.getParentInput() != null &&
+        a.getParentInput().name == "of") {
+
+        let block = a.getSourceBlock().previousConnection.targetBlock();
+        while (block != null && block.type == "ConceptualEditor.Item") {
+            upCheck = dg_grammarian.ConnectionChecker.down(block.getInput("of").connection);
+            if (upCheck != null)
+                return upCheck;
+            block = block.previousConnection.targetBlock();
+        }
+
+        if (block != null &&
+            block.outputConnection != null &&
+            block.outputConnection.targetConnection != null) {
+            upCheck = dg_grammarian.ConnectionChecker.up(block.outputConnection.targetConnection);
+            if (upCheck != null)
+                return upCheck;
+        }
+
+        block = a.getSourceBlock().nextConnection.targetBlock();
+        while (block != null) {
+            upCheck = dg_grammarian.ConnectionChecker.down(block.getInput("of").connection);
+            if (upCheck != null)
+                return upCheck;
+            block = block.nextConnection.targetBlock();
+        }
+    } else if (a.getSourceBlock().type == "ConceptualEditor.Option") {
+        const parent = a.getSourceBlock().getParent();
+        if (parent != null &&
+            parent.outputConnection != null &&
+            parent.outputConnection.targetConnection != null) {
+            upCheck = dg_grammarian.ConnectionChecker.up(parent.outputConnection.targetConnection);
+        }
+    }
+
+    return upCheck;
+}
+dg_grammarian.ConnectionChecker.down = function(b) {
+    let downCheck = b.getCheck();
+    if (downCheck != null)
+        return downCheck;
+
+    if (b.getSourceBlock() == null)
+        return null;
+
+    if (b.getSourceBlock().type == "ConceptualEditor.Item") {
+        const conn = b.getSourceBlock().getInput("of").connection;
+        if (conn.targetConnection != null)
+            downCheck = dg_grammarian.ConnectionChecker.down(conn.targetConnection);
+    } else if (b.getSourceBlock().type == "ConceptualEditor.Option") {
+        let item = b.getSourceBlock().getInput("do").connection.targetBlock();
+        while (item != null) {
+            const conn = item.getInput("of").connection;
+            if (conn.targetConnection != null) {
+                downCheck = dg_grammarian.ConnectionChecker.down(conn.targetConnection);
+                if (downCheck != null)
+                    break;
+            }
+            item = item.nextConnection.targetBlock();
+        }
+    }
+
+    return downCheck;
+}
+dg_grammarian.ConnectionChecker.prototype.doTypeChecks = function(a, b) {
+    const upCheck   = dg_grammarian.ConnectionChecker.up(a);
+    if (upCheck   == null)
+        return true;
+
+    const downCheck = dg_grammarian.ConnectionChecker.down(b);
+    if (downCheck == null)
+        return true;
+
+    // Find any intersection in the check lists.
+    for (let i = 0; i < upCheck.length; i++) {
+        if (downCheck.indexOf(upCheck[i]) != -1) {
+            return true;
+        }
+    }
+
+    // No intersection.
+    return false;
+}
+
 dg_grammarian.linearize_ui = function(tree,cell) {
 	if (this.lin_cache == null || this.lin_cache.lang != gfwordnet.selection.current) {
 		this.lin_cache = {lang: gfwordnet.selection.current, lins: {}};
@@ -1162,6 +1275,9 @@ dg_grammarian.load_phrases = function(url, phrases, from, blocklyDiv, toolbox) {
                     {toolbox: toolbox
                     ,theme: {startHats: true}
                     ,scrollbars: true
+                    ,plugins: {
+                        [Blockly.registry.Type.CONNECTION_CHECKER]: "dg_grammarian.ConnectionChecker"
+                     }
                     });
 
             const dom = Blockly.Xml.textToDom(this.responseText);
