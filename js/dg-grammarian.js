@@ -148,30 +148,6 @@ dg_grammarian = {};
         return code;
     }
 
-    Blockly.Blocks['ConceptualEditor.When'] = {
-      init: function() {
-        this.jsonInit({
-          "message0": 'when %1',
-          "args0": [
-            {
-              "type": "input_value",
-              "name": "CLASS",
-              "check": "Boolean"
-            }
-          ],
-          "message1": "then %1",
-          "args1": [
-            {
-              "type": "input_statement",
-              "name": "do",
-            }
-          ],
-          "colour": 100,
-          "tooltip": "Checks for an instance of a given WordNet class",
-        });
-      }
-    };
-
     Blockly.Blocks["ConceptualEditor.Sentence"] = {
       init: function() {
         this.jsonInit({
@@ -518,6 +494,123 @@ dg_grammarian = {};
           "tooltip": "Checks for an instance of a given WordNet class",
         });
       }
+    };
+
+    Blockly.Blocks['ConceptualEditor.Query'] = {
+      init: function() {
+        this.jsonInit({
+          "message0": "find %1",
+          "args0": [
+            {
+              "type": "field_input",
+              "name": "result",
+              "spellcheck": false
+            }
+          ],
+          "message1": "if %1",
+          "args1": [
+            {
+              "type": "input_statement",
+              "name": "pattern",
+            }
+          ],
+          "message2": "ui %1",
+          "args2": [
+            {
+              "type":  "input_value",
+              "name":  "desc",
+              "check": "abstract_syntax"
+            }
+          ],
+          "output": null,
+          "colour": 190,
+          "tooltip": "Looks up a related expression in the lexicon",
+        });
+      }
+    };
+    Blockly.JavaScript["ConceptualEditor.Query"] = function(block) {
+        let code =
+            "new ConceptualEditor.Query(";
+
+        code += Blockly.JavaScript.quote_(block.getFieldValue("result"));
+
+        code += ",";
+        if (block.getInput("desc").connection.targetBlock() != null) {
+            code += Blockly.JavaScript.valueToCode(block, 'desc', Blockly.JavaScript.ORDER_NONE);
+        } else {
+            code += "null";
+        }
+
+        code += ",";
+        code += sequenceToCode(block, "pattern");
+
+        code += ")";
+        return [code, Blockly.JavaScript.ORDER_NONE];
+    };
+
+    Blockly.Blocks['ConceptualEditor.Triple'] = {
+      init: function() {
+        this.jsonInit({
+          "message0": '%1 %2 %3',
+          "args0": [
+            {
+              "type": "field_input",
+              "name": "subject",
+              "spellcheck": false
+            },
+            {
+              "type": "field_dropdown",
+              "name": "predicate",
+              "options": [
+                  ["Antonym", "Antonym"],
+                  ["Hypernym", "Hypernym"],
+                  ["Instance Hypernym", "InstanceHypernym"],
+                  ["Hyponym", "Hyponym"],
+                  ["Instance Hyponym", "InstanceHyponym"],
+                  ["Member Holonym", "Holonym Member"],
+                  ["Substance Holonym", "Holonym Substance"],
+                  ["Part Holonym", "Holonym Part"],
+                  ["Member Meronym", "Meronym Member"],
+                  ["Substance Meronym", "Meronym Substance"],
+                  ["Part Meronym", "Meronym Part"],
+                  ["Attribute", "Attribute"],
+                  ["Domain of Topic Synset", "DomainOfSynset Topic"],
+                  ["Domain of Region Synset", "DomainOfSynset Region"],
+                  ["Domain of Usage Synset", "DomainOfSynset Usage"],
+                  ["Member of Topic Domain", "MemberOfDomain Topic"],
+                  ["Member of Region Domain", "MemberOfDomain Region"],
+                  ["Member of Usage Domain", "MemberOfDomain Usage"],
+                  ["Entailment", "Entailment"],
+                  ["Cause", "Cause"],
+                  ["AlsoSee", "AlsoSee"],
+                  ["VerbGroup", "VerbGroup"],
+                  ["SimilarTo", "SimilarTo"],
+                  ["Derived", "Derived"],
+                  ["Participle", "Participle"]
+              ]
+            },
+            {
+              "type": "field_input",
+              "name": "object",
+              "spellcheck": false
+            }
+          ],
+          "previousStatement": null,
+          "nextStatement": null,
+          "colour": 190,
+          "tooltip": "Represents a relation in the lexicon",
+        });
+      }
+    };
+    Blockly.JavaScript["ConceptualEditor.Triple"] = function(block) {
+        let code = "[";
+        code += Blockly.JavaScript.quote_(block.getFieldValue("subject"));
+        code += ",";
+        code += Blockly.JavaScript.quote_(block.getFieldValue("predicate"));
+        code += ",";
+        code += Blockly.JavaScript.quote_(block.getFieldValue("object"));
+        code += "]";
+        return code;
     };
 
     Blockly.Blocks["ConceptualEditor.Definition"] = {
@@ -1315,7 +1408,7 @@ dg_grammarian.load_phrases = function(url, phrases, from, blocklyDiv, toolbox) {
         }
         if (dg_grammarian.context != null) {
             dg_grammarian.context.reset();
-            dg_grammarian.regenerate(event.new_language,event.new_current);
+            dg_grammarian.regenerate(event.new_language,event.new_current).then(null, gfwordnet.errcont);
         }
     });
 
@@ -1339,13 +1432,13 @@ dg_grammarian.load_phrases = function(url, phrases, from, blocklyDiv, toolbox) {
 
             dg_grammarian.editor = new ConceptualEditor();
             eval(Blockly.JavaScript.workspaceToCode(dg_grammarian.workspace));
-            dg_grammarian.init_phrases(phrases);
+            dg_grammarian.init_phrases(phrases).then(null, gfwordnet.errcont);
         }
     };
     xhttp.open("GET", url, true);
     xhttp.send();
 }
-dg_grammarian.init_phrases = function(phrases) {
+dg_grammarian.init_phrases = async function(phrases) {
     clear(phrases);
     const sentences = dg_grammarian.editor.getSentences();
     for (let i = 0; i < sentences.length; i++) {
@@ -1354,15 +1447,15 @@ dg_grammarian.init_phrases = function(phrases) {
                 dg_grammarian.onclick_sentence(this.parentNode, sentences[i]);
             });
         const context = new ChoiceContext(dg_grammarian.editor);
-        dg_grammarian.linearize_ui(sentences[i].getDesciption(context),cell);
+        dg_grammarian.linearize_ui(await sentences[i].getDesciption(context),cell);
         phrases.appendChild(tr(cell));
     }
 }
-dg_grammarian.regenerate = function(update_lin,update_choices) {
+dg_grammarian.regenerate = async function(update_lin,update_choices) {
 	var linearization = element('linearization');
 	var choices = element('choices');
 
-	var expr = this.sentence.getAbstractSyntax(this.context);
+	var expr = await this.sentence.getAbstractSyntax(this.context);
 
 	if (update_lin) {
 		function extract_linearization(lins) {
@@ -1377,7 +1470,7 @@ dg_grammarian.regenerate = function(update_lin,update_choices) {
 		clear(choices);
 		for (var i in this.context.choices) {
 			const choice = this.context.choices[i];
-			const desc   = choice.getNode().getDescription(new ChoiceContext(dg_grammarian.editor));
+			const desc   = await choice.getNode().getDescription(new ChoiceContext(dg_grammarian.editor));
 			let edit   = null;
 			let cell   = null;
 
@@ -1387,7 +1480,7 @@ dg_grammarian.regenerate = function(update_lin,update_choices) {
 					edit = node("label", {}, [edit]);
 					cell = edit;
 				}
-			} else if (choice.getNode() instanceof ConceptualEditor.Lexicon) {
+			} else if (choice.getNode() instanceof ConceptualEditor.Lexicon || choice.getNode() instanceof ConceptualEditor.Query) {
 				cell = td([]);
 				choices.appendChild(tr(cell));
 
@@ -1399,7 +1492,7 @@ dg_grammarian.regenerate = function(update_lin,update_choices) {
 				var options     = {}
 				var lexical_ids = ""
 				for (var j = 0; j < items.length; j++) {
-					var lemma  = items[j].getDescription(new ChoiceContext(dg_grammarian.editor));
+					var lemma  = await items[j].getDescription(new ChoiceContext(dg_grammarian.editor));
 					
 					var option = node("option", {value: j}, []);
 					dg_grammarian.linearize_ui(lemma,option);
@@ -1469,7 +1562,7 @@ dg_grammarian.regenerate = function(update_lin,update_choices) {
 
 				var items = choice.getOptions();
 				for (let j = 0; j < items.length; j++) {
-					const item_desc = items[j].getDescription(new ChoiceContext(dg_grammarian.editor));
+					const item_desc = await items[j].getDescription(new ChoiceContext(dg_grammarian.editor));
 
 					const option = node("option", {value: j}, []);
 					dg_grammarian.linearize_ui(item_desc,option);
@@ -1553,7 +1646,7 @@ dg_grammarian.onclick_sentence = function(row,sentence) {
     if (dg_grammarian.edit_mode) {
         this.context  = new ChoiceContext(dg_grammarian.editor);
         this.sentence = sentence;
-        this.regenerate(true,true);
+        this.regenerate(true,true).then(null, gfwordnet.errcont);
 
         const items = document.getElementsByClassName("current");
         while (items.length > 0) {
@@ -1575,7 +1668,7 @@ dg_grammarian.onclick_sentence = function(row,sentence) {
 dg_grammarian.onchange_option = function(i,j) {
 	this.context.choices[i].setChoice(j);
 	this.context.reset();
-	this.regenerate(true,true);
+	this.regenerate(true,true).then(null, gfwordnet.errcont);
 }
 
 dg_grammarian.onedit_rules = function(editBtn, phrases, linearization, choices, blocklyDiv) {

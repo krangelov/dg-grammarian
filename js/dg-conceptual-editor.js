@@ -23,8 +23,8 @@ ConceptualEditor.Sentence = function(id,desc,content) {
     this.content = content;
     this.desc    = desc;
 }
-ConceptualEditor.Sentence.prototype.getAbstractSyntax = function(context) {
-	var expr = this.content.getAbstractSyntax(context);
+ConceptualEditor.Sentence.prototype.getAbstractSyntax = async function(context) {
+	var expr = await this.content.getAbstractSyntax(context);
 	context.trim();
 	return expr;
 }
@@ -42,7 +42,7 @@ ConceptualEditor.Function = function() {
         this.arguments.push(arguments[i]);
     }
 }
-ConceptualEditor.Function.prototype.getAbstractSyntax = function(context) {
+ConceptualEditor.Function.prototype.getAbstractSyntax = async function(context) {
 	if (this.arguments == null || this.arguments.length == 0) {
 		// context.incrementFId(function.size()); --??
 		if (this.func.indexOf(' ') >= 0)
@@ -55,7 +55,7 @@ ConceptualEditor.Function.prototype.getAbstractSyntax = function(context) {
 
 	var expr = this.func;
 	for (var i = 0; i < this.arguments.length; i++) {
-		expr += " " + this.arguments[i].getAbstractSyntax(context);
+		expr += " " + await this.arguments[i].getAbstractSyntax(context);
 	}
 	expr = "("+expr+")";
 
@@ -85,9 +85,9 @@ ConceptualEditor.Option = function() {
         this.items.push(arguments[i]);
     }
 }
-ConceptualEditor.Option.prototype.getAbstractSyntax = function(context) {
+ConceptualEditor.Option.prototype.getAbstractSyntax = async function(context) {
 	var parent  = context.changeParentNode(this);
-	var expr = this.items[context.choose(this)].getAbstractSyntax(context);
+	var expr = await this.items[context.choose(this)].getAbstractSyntax(context);
 	context.changeParentNode(parent);
 	return expr;
 }
@@ -104,7 +104,7 @@ ConceptualEditor.Lexicon = function() {
         this.items.push(arguments[i]);
     }
 }
-ConceptualEditor.Lexicon.prototype.getAbstractSyntax = function(context) {
+ConceptualEditor.Lexicon.prototype.getAbstractSyntax = async function(context) {
 	var parent  = context.changeParentNode(this);
 	var expr = this.items[context.choose(this)].getAbstractSyntax(context);
 	context.changeParentNode(parent);
@@ -120,9 +120,9 @@ ConceptualEditor.Boolean = function(desc,checked,unchecked) {
     this.desc  = desc;
     this.items = [checked, unchecked];
 }
-ConceptualEditor.Boolean.prototype.getAbstractSyntax = function(context) {
+ConceptualEditor.Boolean.prototype.getAbstractSyntax = async function(context) {
 	const parent = context.changeParentNode(this);
-    let expr = this.items[context.choose(this)].getAbstractSyntax(context);
+    let expr = await this.items[context.choose(this)].getAbstractSyntax(context);
 	context.changeParentNode(parent);
 	return expr;
 }
@@ -138,7 +138,7 @@ ConceptualEditor.Numeral = function(desc,min,max,def) {
     this.max     = max;
     this.default = def;
 }
-ConceptualEditor.Numeral.prototype.getAbstractSyntax = function(context) {
+ConceptualEditor.Numeral.prototype.getAbstractSyntax = async function(context) {
 	function subs1000(nbr) {
         var syntax = "";
         if (nbr < 100) {
@@ -206,21 +206,74 @@ ConceptualEditor.Numeral.prototype.getDescription = function(context) {
 ConceptualEditor.String = function(str) {
     this.str = str;
 }
-ConceptualEditor.String.prototype.getAbstractSyntax = function(context) {
+ConceptualEditor.String.prototype.getAbstractSyntax = async function(context) {
 	return JSON.stringify(this.str);
+}
+
+ConceptualEditor.Query = function() {
+    this.result  = arguments[0];
+    this.desc    = arguments[1];
+    this.triples = [];
+    for (let i = 2; i < arguments.length; i++) {
+        this.triples.push(arguments[i]);
+    }
+    this.items   = [];
+}
+ConceptualEditor.Query.prototype.getAbstractSyntax = async function(context) {
+
+    const env = {}
+    for (let i in context.choices) {
+        const choice = context.choices[i];
+
+        if (choice.getNode() instanceof ConceptualEditor.Lexicon) {
+            const items = choice.getOptions();
+            const no = parseInt(i)+1
+            env["C"+no] = await items[choice.getChoice()].getAbstractSyntax(new ChoiceContext(context.editor));
+        }
+    }
+    const pattern = {
+        triples: this.triples,
+        env: env
+    };
+
+    response = await fetch(gfwordnet.sense_url+'?pattern_match='+this.result,
+                           {method: "POST", body: JSON.stringify(pattern)});
+    res = await response.json();
+    this.items = []
+    for (let i in res) {
+        for (let fn in res[i][this.result].lex_ids) {
+            this.items.push(new ConceptualEditor.Item(new ConceptualEditor.Function(fn)));
+        }
+    }
+
+    if (this.items.length == 0) {
+        return "?";
+    } else if (this.items.length == 1) {
+        return await this.items[0].getAbstractSyntax(context);
+    } else {
+        const parent  = context.changeParentNode(this);
+        const expr = await this.items[context.choose(this)].getAbstractSyntax(context);
+        context.changeParentNode(parent);
+        return expr;
+    }
+}
+ConceptualEditor.Query.prototype.getDescription = function(context) {
+	if (this.desc == null)
+        return null;
+    return this.desc.getAbstractSyntax(context);
 }
 
 ConceptualEditor.Call = function() {
     this.ref    = arguments[0];
     this.arguments = [];
-    for (var i = 1; i < arguments.length; i++) {
+    for (let i = 1; i < arguments.length; i++) {
         this.arguments.push(arguments[i]);
     }
 }
-ConceptualEditor.Call.prototype.getAbstractSyntax = function(context) {
-	var body = context.editor.getDefinitionBody(this.ref);
+ConceptualEditor.Call.prototype.getAbstractSyntax = async function(context) {
+	const body = context.editor.getDefinitionBody(this.ref);
 	context.push(this.arguments);
-	var res = body.getAbstractSyntax(context);
+	const res = await body.getAbstractSyntax(context);
 	context.pop();
 	return res;
 }
