@@ -230,6 +230,7 @@ dg_grammarian = {};
             {
               "type": "input_statement",
               "name": "do",
+              "check": "item"
             }
           ],
           "message1": "ui %1",
@@ -271,6 +272,7 @@ dg_grammarian = {};
             {
               "type": "input_statement",
               "name": "do",
+              "check": "item"
             }
           ],
           "message1": "ui %1",
@@ -290,6 +292,8 @@ dg_grammarian = {};
     Blockly.JavaScript["ConceptualEditor.Lexicon"] = function(block) {
         let code =
             "new ConceptualEditor.Lexicon(";
+
+        code += Blockly.JavaScript.quote_(block.id)+",";
 
         if (block.getInput("desc").connection.targetBlock() != null) {
             code += Blockly.JavaScript.valueToCode(block, 'desc', Blockly.JavaScript.ORDER_NONE);
@@ -423,8 +427,8 @@ dg_grammarian = {};
             }
           ],
           "mutator": "dg_desc_mutator",
-          "previousStatement": null,
-          "nextStatement": null,
+          "previousStatement": "item",
+          "nextStatement": "item",
           "colour": 230,
           "tooltip": "Defines an alternative in a list of options",
         });
@@ -496,15 +500,253 @@ dg_grammarian = {};
       }
     };
 
+    const FieldQueryVariable = function(empty_msg, only_scope_vars) {
+      this.empty_msg = empty_msg;
+      this.only_scope_vars = only_scope_vars;
+      FieldQueryVariable.superClass_.constructor.call(this, FieldQueryVariable.dropdownCreate.bind(this));
+    };
+    Blockly.utils.object.inherits(FieldQueryVariable, Blockly.FieldDropdown);
+
+    FieldQueryVariable.fromJson = function(options) {
+      const empty_msg = Blockly.utils.replaceMessageReferences(options['empty_msg']);
+      const only_scope_vars = Blockly.utils.replaceMessageReferences(options['only_scope_vars']);
+      return new FieldQueryVariable(empty_msg, only_scope_vars);
+    };
+
+    FieldQueryVariable.prototype.onItemSelected_ = function(menu, menuItem) {
+      const id = menuItem.getValue();
+      // Handle special cases.
+      if (id == "NEW_VARIABLE_ID") {
+          const promptAndCheckWithAlert = (text) => {
+            Blockly.Variables.promptName(Blockly.Msg['NEW_VARIABLE_TITLE'], text, (varName) => {
+                if (varName == null)
+                    return;
+
+                if (varName == "") {
+                    Blockly.alert("Variable name cannot be empty",
+                      function() {
+                        promptAndCheckWithAlert(varName);  // Recurse
+                      });
+                    return;
+                }
+
+                if (varName == "NEW_VARIABLE_ID" ||
+                    varName == Blockly.RENAME_VARIABLE_ID) {
+                    Blockly.alert("This variable name is reserved",
+                      function() {
+                        promptAndCheckWithAlert(varName);  // Recurse
+                      });
+                    return;
+                }
+
+                const scope = this.getVariableScope();
+                if (scope.indexOf(varName) >= 0) {
+                    const msg = Blockly.Msg['VARIABLE_ALREADY_EXISTS'].replace('%1', varName);
+                    Blockly.alert(msg,
+                      function() {
+                        promptAndCheckWithAlert(varName);  // Recurse
+                      });
+                    return;
+                }
+
+                scope.push(varName);
+                this.getOptions(false); // forces regeneration of the cache
+                this.setValue(varName);
+            });
+          };
+
+          promptAndCheckWithAlert("");
+      } else if (id == Blockly.RENAME_VARIABLE_ID) {
+          const oldValue   = this.getValue();
+          const promptText =
+                Blockly.Msg['RENAME_VARIABLE_TITLE'].replace('%1', oldValue);
+
+          const promptAndCheckWithAlert = (text) => {
+            Blockly.Variables.promptName(promptText, text, (varName) => {
+                if (varName == null)
+                    return;
+
+                if (varName == "") {
+                    Blockly.alert("Variable name cannot be empty",
+                      function() {
+                        promptAndCheckWithAlert(varName);  // Recurse
+                      });
+                    return;
+                }
+
+                if (varName == "NEW_VARIABLE_ID" ||
+                    varName == Blockly.RENAME_VARIABLE_ID) {
+                    Blockly.alert("This variable name is reserved",
+                      function() {
+                        promptAndCheckWithAlert(varName);  // Recurse
+                      });
+                    return;
+                }
+
+                const scope = this.getVariableScope();
+                if (scope.indexOf(varName) >= 0) {
+                    const msg = Blockly.Msg['VARIABLE_ALREADY_EXISTS'].replace('%1', varName);
+                    Blockly.alert(msg,
+                      function() {
+                        promptAndCheckWithAlert(varName);  // Recurse
+                      });
+                    return;
+                }
+
+                const index = scope.indexOf(oldValue);
+                if (index !== -1) {
+                    scope[index] = varName;
+                }
+
+                if (this.getSourceBlock() != null) {
+                    let block = this.getSourceBlock();
+                    while (block != null &&
+                           block.type != "ConceptualEditor.Query") {
+                        const field1 = block.getField("subject");
+                        if (field1.getValue() == oldValue) {
+                            field1.getOptions(false); // forces regeneration of the cache
+                            field1.setValue(varName);
+                        }
+                        const field2 = block.getField("object");
+                        if (field2.getValue() == oldValue) {
+                            field2.getOptions(false); // forces regeneration of the cache
+                            field2.setValue(varName);
+                        }
+                        block = block.previousConnection.targetBlock();
+                    };
+
+                    block = this.getSourceBlock().nextConnection.targetBlock();
+                    while (block != null) {
+                        const field1 = block.getField("subject");
+                        if (field1.getValue() == oldValue) {
+                            field1.getOptions(false); // forces regeneration of the cache
+                            field1.setValue(varName);
+                        }
+                        const field2 = block.getField("object");
+                        if (field2.getValue() == oldValue) {
+                            field2.getOptions(false); // forces regeneration of the cache
+                            field2.setValue(varName);
+                        }
+                        block = block.nextConnection.targetBlock();
+                    };
+                }
+            });
+        };
+
+        promptAndCheckWithAlert('');
+      } else {
+        // Handle normal case.
+        this.setValue(id);
+      }
+    }
+
+    FieldQueryVariable.prototype.getQueryBlock = function() {
+        if (this.getSourceBlock() != null) {
+            if (this.getSourceBlock().type == "ConceptualEditor.Query")
+                return this.getSourceBlock();
+
+            let block = this.getSourceBlock().previousConnection.targetBlock();
+            while (block != null) {
+                if (block.type == "ConceptualEditor.Query")
+                    return block;
+                block = block.previousConnection.targetBlock();
+            };
+        }
+
+        return null;
+    };
+
+    FieldQueryVariable.prototype.getVariableScope = function() {
+        const block = this.getQueryBlock();
+        return block ? block.variableScope : null;
+    };
+
+    FieldQueryVariable.prototype.getLexiconScope = function() {
+        const scope     = [];
+
+        let block = this.getQueryBlock();
+        if (block == null)
+            return scope;
+
+        if (block.outputConnection.targetConnection == null)
+            return scope;
+
+        let input = block.outputConnection.targetConnection.getParentInput();
+
+        block = input.getSourceBlock();
+        for (;;) {
+            let index = 0;
+
+            const inputList = block.inputList;
+            for (let i in inputList) {
+                if (inputList[i] == input)
+                    break;
+                const child = inputList[i].connection.targetBlock();
+                if (child != null &&
+                    child.type == "ConceptualEditor.Lexicon") {
+                    scope.splice(index, 0, child); 
+                    index++;
+                }
+            }
+
+            if (block.outputConnection != null &&
+                block.outputConnection.targetConnection != null) {
+                input = block.outputConnection.targetConnection.getParentInput();
+                block = input.getSourceBlock();
+            } else {
+                break;
+            }
+        }
+
+        return scope;
+    };
+
+    FieldQueryVariable.dropdownCreate = function() {
+        const scope   = this.getVariableScope();
+        const options = [];
+
+        if (scope == null) {
+            options.push([this.empty_msg, ""]);
+        } else {
+            for (let varName of scope) {
+                options.push([varName, varName]);
+            }
+
+            if (scope.length == 0) {
+                options.push([this.empty_msg, ""]);
+            }
+
+            if (!this.only_scope_vars) {
+                options.push([Blockly.Msg["NEW_VARIABLE"], "NEW_VARIABLE_ID"]);
+
+                if (this.getValue() != "") {
+                    options.push([Blockly.Msg["RENAME_VARIABLE"], Blockly.RENAME_VARIABLE_ID]);
+                }
+            }
+        }
+
+        if (!this.only_scope_vars) {
+            const lex_scope = this.getLexiconScope();
+            for (let i in lex_scope) {
+                options.push(["Use Choice "+(parseInt(i)+1), lex_scope[i].id]);
+            }
+        }
+
+        return options;
+    };
+
+    Blockly.fieldRegistry.register('field_query_variable', FieldQueryVariable);
+
     Blockly.Blocks['ConceptualEditor.Query'] = {
       init: function() {
         this.jsonInit({
           "message0": "find %1",
           "args0": [
             {
-              "type": "field_input",
+              "type": "field_query_variable",
               "name": "result",
-              "spellcheck": false
+              "empty_msg": "<no result>",
+              "only_scope_vars": true
             }
           ],
           "message1": "if %1",
@@ -512,6 +754,7 @@ dg_grammarian = {};
             {
               "type": "input_statement",
               "name": "pattern",
+              "check": "triple"
             }
           ],
           "message2": "ui %1",
@@ -526,6 +769,8 @@ dg_grammarian = {};
           "colour": 190,
           "tooltip": "Looks up a related expression in the lexicon",
         });
+
+        this.variableScope = [];
       }
     };
     Blockly.JavaScript["ConceptualEditor.Query"] = function(block) {
@@ -554,9 +799,9 @@ dg_grammarian = {};
           "message0": '%1 %2 %3',
           "args0": [
             {
-              "type": "field_input",
+              "type": "field_query_variable",
               "name": "subject",
-              "spellcheck": false
+              "empty_msg": "<no subject>"
             },
             {
               "type": "field_dropdown",
@@ -590,13 +835,13 @@ dg_grammarian = {};
               ]
             },
             {
-              "type": "field_input",
+              "type": "field_query_variable",
               "name": "object",
-              "spellcheck": false
+              "empty_msg": "<no object>"
             }
           ],
-          "previousStatement": null,
-          "nextStatement": null,
+          "previousStatement": "triple",
+          "nextStatement": "triple",
           "colour": 190,
           "tooltip": "Represents a relation in the lexicon",
         });

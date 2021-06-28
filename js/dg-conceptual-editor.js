@@ -98,9 +98,10 @@ ConceptualEditor.Option.prototype.getDescription = function(context) {
 }
 
 ConceptualEditor.Lexicon = function() {
-    this.desc  = arguments[0];
+    this.id    = arguments[0];
+    this.desc  = arguments[1];
     this.items = [];
-    for (var i = 1; i < arguments.length; i++) {
+    for (var i = 2; i < arguments.length; i++) {
         this.items.push(arguments[i]);
     }
 }
@@ -228,7 +229,7 @@ ConceptualEditor.Query.prototype.getAbstractSyntax = async function(context) {
         if (choice.getNode() instanceof ConceptualEditor.Lexicon) {
             const items = choice.getOptions();
             const no = parseInt(i)+1
-            env["C"+no] = await items[choice.getChoice()].getAbstractSyntax(new ChoiceContext(context.editor));
+            env[choice.getNode().id] = await items[choice.getChoice()].getAbstractSyntax(new ChoiceContext(context.editor));
         }
     }
     const pattern = {
