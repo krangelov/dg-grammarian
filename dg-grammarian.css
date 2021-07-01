@@ -120,3 +120,25 @@ div.wn_search {
 	overflow: auto;
 	z-index: 100;
 }
+
+ul.pointers {
+    list-style: none;
+    padding-inline-start: 10px;
+}
+
+ul.pointers > li:before
+{
+    content: '\279C';
+    margin-right: 0.3em;
+}
+
+ul.pointers > li > ul {
+    list-style: none;
+    padding-inline-start: 40px;
+}
+
+ul.pointers > li > ul > li:before
+{
+    content: '\229E';
+    margin-right: 0.3em;
+}

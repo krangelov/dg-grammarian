@@ -198,6 +198,12 @@ dg_grammarian = {};
           "mutator": "dg_abstract_syntax_mutator",
           "tooltip": "Generates a new phrase from zero or more arguments"
         });
+      },
+      hasLexicalFunction: function() {
+        return (this.xml_template != null &&
+                this.xml_template.tagName == "function" &&
+                this.xml_template.childNodes.length == 0);
+
       }
     };
     Blockly.JavaScript["ConceptualEditor.Function"] = function(block) {
@@ -513,17 +519,20 @@ dg_grammarian = {};
       return new FieldQueryVariable(empty_msg, only_scope_vars);
     };
 
+    FieldQueryVariable.variableRegEx = /^[A-Za-z_]\w*$/;
+
     FieldQueryVariable.prototype.onItemSelected_ = function(menu, menuItem) {
       const id = menuItem.getValue();
       // Handle special cases.
       if (id == "NEW_VARIABLE_ID") {
           const promptAndCheckWithAlert = (text) => {
             Blockly.Variables.promptName(Blockly.Msg['NEW_VARIABLE_TITLE'], text, (varName) => {
-                if (varName == null)
+                if (varName == null) {
                     return;
+                }
 
-                if (varName == "") {
-                    Blockly.alert("Variable name cannot be empty",
+                if (!FieldQueryVariable.variableRegEx.test(varName)) {
+                    Blockly.alert("\""+varName+"\" is not a valid variable name",
                       function() {
                         promptAndCheckWithAlert(varName);  // Recurse
                       });
@@ -531,7 +540,8 @@ dg_grammarian = {};
                 }
 
                 if (varName == "NEW_VARIABLE_ID" ||
-                    varName == Blockly.RENAME_VARIABLE_ID) {
+                    varName == Blockly.RENAME_VARIABLE_ID ||
+                    varName == "NEW__CONCEPT_ID") {
                     Blockly.alert("This variable name is reserved",
                       function() {
                         promptAndCheckWithAlert(varName);  // Recurse
@@ -575,7 +585,8 @@ dg_grammarian = {};
                 }
 
                 if (varName == "NEW_VARIABLE_ID" ||
-                    varName == Blockly.RENAME_VARIABLE_ID) {
+                    varName == Blockly.RENAME_VARIABLE_ID ||
+                    varName == "NEW_CONCEPT_ID") {
                     Blockly.alert("This variable name is reserved",
                       function() {
                         promptAndCheckWithAlert(varName);  // Recurse
@@ -634,6 +645,8 @@ dg_grammarian = {};
         };
 
         promptAndCheckWithAlert('');
+      } else if (id == "NEW_CONCEPT_ID") {
+          dg_grammarian.show_gloss_search_dialog();
       } else {
         // Handle normal case.
         this.setValue(id);
@@ -659,6 +672,11 @@ dg_grammarian = {};
     FieldQueryVariable.prototype.getVariableScope = function() {
         const block = this.getQueryBlock();
         return block ? block.variableScope : null;
+    };
+
+    FieldQueryVariable.prototype.getSynsets = function() {
+        const block = this.getQueryBlock();
+        return block ? block.synsets : null;
     };
 
     FieldQueryVariable.prototype.getLexiconScope = function() {
@@ -703,6 +721,7 @@ dg_grammarian = {};
 
     FieldQueryVariable.dropdownCreate = function() {
         const scope   = this.getVariableScope();
+        const synsets = this.getSynsets();
         const options = [];
 
         if (scope == null) {
@@ -719,7 +738,7 @@ dg_grammarian = {};
             if (!this.only_scope_vars) {
                 options.push([Blockly.Msg["NEW_VARIABLE"], "NEW_VARIABLE_ID"]);
 
-                if (this.getValue() != "") {
+                if (FieldQueryVariable.variableRegEx.test(this.getValue())) {
                     options.push([Blockly.Msg["RENAME_VARIABLE"], Blockly.RENAME_VARIABLE_ID]);
                 }
             }
@@ -730,6 +749,14 @@ dg_grammarian = {};
             for (let i in lex_scope) {
                 options.push(["Use Choice "+(parseInt(i)+1), lex_scope[i].id]);
             }
+
+            if (synsets != null) {
+                for (let synset of synsets) {
+                    options.push(["Concept "+synset, synset]);
+                }
+            }
+
+            options.push(["Select New Concept", "NEW_CONCEPT_ID"]);
         }
 
         return options;
@@ -771,6 +798,7 @@ dg_grammarian = {};
         });
 
         this.variableScope = [];
+        this.synsets       = [];
       }
     };
     Blockly.JavaScript["ConceptualEditor.Query"] = function(block) {
@@ -958,6 +986,7 @@ dg_grammarian.AbstractSyntaxEditor = function(quarkNames) {
   dg_grammarian.AbstractSyntaxEditor.superClass_.constructor.call(this, quarkNames);
 };
 Blockly.utils.object.inherits(dg_grammarian.AbstractSyntaxEditor, Blockly.Mutator);
+
 dg_grammarian.AbstractSyntaxEditor.prototype.setVisible = function(visible) {
     let search = this.getSearchPopup();
 
@@ -968,46 +997,422 @@ dg_grammarian.AbstractSyntaxEditor.prototype.setVisible = function(visible) {
     Blockly.Events.fire(new (Blockly.Events.get(Blockly.Events.BUBBLE_OPEN))(
                                 this.block_, visible, 'mutator'));
     if (visible) {
-        const edt = node("input", {type: "text", style: "width: 50em"}, []);
-        const parseBtn = node("input", {type: "button", value: "Parse"}, []);
         const doneBtn  = node("input", {type: "button", style: "float: right", value: "Done"}, []);
-        const spanNode = node("span", {style: "float: right"}, [text("\xa0\xa0")])
         const cancelBtn  = node("input", {type: "button", style: "float: right", value: "Cancel"}, []);
-        const linearization = node("td", {colspan: 2}, []);
-        const table = node("table", {}, [tr([td(edt),td(parseBtn),node("td",{style: "width: 100%"},[cancelBtn,spanNode,doneBtn])])
-                                        ,tr(linearization)]);
-        search = div_class("wn_search",[table]);
+        const container = node("div", {}, []);
 
-        parseBtn.addEventListener("click", (e) => {
-                this.parse(edt.value, linearization);
-                doneBtn.disabled = false;
-            });
+        const row = [];
+
+        const parseTab =
+          node("h1",{class: "selected"},[text("Parse")]);
+        parseTab.addEventListener("click", (e) =>
+                this.onclick_tab(parseTab,container,doneBtn));
+        row.push(td(parseTab));
+
+        if (this.block_.hasLexicalFunction()) {
+            const lexiconTab =
+              node("h1",{class: "unselected"},[text("Lexicon")]);
+            lexiconTab.addEventListener("click", (e) =>
+                    this.onclick_tab(lexiconTab,container,doneBtn));
+            row.push(td(lexiconTab));
+
+            const relateTab =
+              node("h1",{class: "unselected"},[text("Relate")]);
+            relateTab.addEventListener("click", (e) =>
+                    this.onclick_tab(relateTab,container,doneBtn));
+            row.push(td(relateTab));
+        }
+
+        row.push(td(cancelBtn));
+        row.push(td(doneBtn));
+
+        const tabs =
+          node("table",{class: "header-tabs"},[tr(row)]);
+
+        this.init_parse_tab(container, doneBtn);
+
+        search = div_class("wn_search",[tabs,container]);
+
         doneBtn.disabled = true;
         doneBtn.addEventListener("click", (e) => {
-                if (this.state != null) {
-                    const xmlDoc = document.implementation.createDocument(null,null);
-                    const mutElem = xmlDoc.createElement("mutation");
-                    const children = [];
-                    this.block_.xml_template =
-                        this.state.createXmlTemplateAndChildren(xmlDoc,Blockly.getMainWorkspace(),children,this.state.root);
-                    mutElem.appendChild(this.block_.xml_template);
-                    mutElem.setAttribute("type", this.state.chart[this.state.root].cat);
-
-                    this.block_.clearAllInputs();
-                    this.block_.domToMutation(mutElem);
-                    for (let sub of children) {
-                        const input = this.block_.getInput('arg '+sub[0]);
-                        input.connection.connect(sub[1].outputConnection);
-                    }
-                }
-                search.parentNode.removeChild(search);
+                const tab = tabs.querySelector(".selected");
+                this.done(search, tab, container);
             });
         cancelBtn.addEventListener("click", (e) => {
-                search.parentNode.removeChild(search);
+                document.body.removeChild(search);
             });
         document.body.appendChild(search);
     } else {
         search.parentNode.removeChild(search);
+    }
+}
+dg_grammarian.AbstractSyntaxEditor.prototype.onclick_tab = function (tab,container,doneBtn) {
+	var tr = tab.parentNode.parentNode;
+	var td = tr.firstChild;
+	while (td != null) {
+		if (td.firstChild == tab) {
+			td.firstChild.className = "selected";
+		} else if (td.firstChild.className == "selected") {
+			td.firstChild.className = "unselected";
+		}
+		td = td.nextSibling;
+	}
+
+    this.init(tab,container,doneBtn);
+}
+dg_grammarian.AbstractSyntaxEditor.prototype.init = function (tab,container,doneBtn) {
+    doneBtn.disabled = true;
+	if (tab.innerHTML == "Parse") {
+		this.init_parse_tab(container,doneBtn);
+	} else if (tab.innerHTML == "Lexicon") {
+		this.init_lexicon_tab(container,doneBtn);
+	} else if (tab.innerHTML == "Relate") {
+		this.init_relate_tab(container,doneBtn);
+	}
+}
+dg_grammarian.AbstractSyntaxEditor.prototype.init_parse_tab = function (container,doneBtn) {
+    clear(container);
+
+    const edt = node("input", {type: "text", placeholder: "Enter a phrase to parse", spellcheck: "false", style: "width: 50em"}, []);
+    const parseBtn = node("input", {type: "button", value: "Parse"}, []);
+    const linearization = node("td", {colspan: 2}, []);
+    const table = node("table", {}, [tr([td(edt),td(parseBtn)])
+                                    ,tr(linearization)]);
+
+    edt.addEventListener("keyup", function(event) {
+        event.preventDefault();
+        if (event.keyCode === 13) {
+            parseBtn.click();
+        }
+    });
+    parseBtn.addEventListener("click", (e) => {
+        this.parse(edt.value, linearization);
+        doneBtn.disabled = false;
+    });
+
+    container.appendChild(table);
+}
+dg_grammarian.AbstractSyntaxEditor.prototype.init_lexicon_tab = function (container,doneBtn) {
+    clear(container);
+
+    doneBtn.disabled = false;
+
+    gfwordnet.selection = getMultiSelection(element('from'));
+    gfwordnet.selection.lex_ids = {};
+    gfwordnet.can_select = true;
+
+    const edt = node("input", {type: "text", placeholder: "Search for a word", spellcheck: "false"}, []);
+    const searchBtn = node("input", {type: "button", value: "Search"}, []);
+    const table1 = node("table", {}, [tr([td(edt),td(searchBtn)])]);
+    container.appendChild(table1);
+
+    container.appendChild(node("br", {}, []));
+
+    const domains = node("table", {class: "selectors"}, [
+                      node("thead", {}, []),
+                      node("tbody", {}, [])
+                    ]);
+    const result = node("table", {class: "result"},  [
+                      node("thead", {}, []),
+                      node("tbody", {}, []),
+                      node("tfoot", {}, [])
+                    ]);
+    const divElem = node("div", {style: "min-height: 85%"}, [domains,result]);
+    container.appendChild(divElem);
+
+    edt.addEventListener("keyup", function(event) {
+        event.preventDefault();
+        if (event.keyCode === 13) {
+            searchBtn.click();
+        }
+    });
+
+    const lemmas = [];
+    let   lexical_ids = "";
+
+    let itemBlock = this.block_.outputConnection.targetBlock();
+    if (itemBlock != null && itemBlock.type == "ConceptualEditor.Item") {
+        for (;;) {
+            const prevBlock = itemBlock.previousConnection.targetBlock();
+            if (prevBlock == null || prevBlock.type != "ConceptualEditor.Item")
+                break;
+            itemBlock = prevBlock;
+        }
+
+        while (itemBlock != null) {
+            const funBlock = itemBlock.getInput("of").connection.targetBlock();
+            if (funBlock != null &&
+                funBlock.type == "ConceptualEditor.Function" &&
+                funBlock.hasLexicalFunction()) {
+                const lex_id = funBlock.xml_template.getAttribute("name");
+                lexical_ids = lexical_ids+" "+lex_id;
+                lemmas.push({lemma: lex_id, prob: 0});
+            }
+            itemBlock = itemBlock.nextConnection.targetBlock();
+        }
+    } else {
+        const lex_id = this.block_.xml_template.getAttribute("name");
+        lexical_ids = lex_id;
+        lemmas.push({lemma: lex_id, prob: 0});
+    }
+
+    const rows =
+        gfwordnet.render_rows(result,gfwordnet.selection,true,lemmas);
+
+    function helper(senses) {
+        const result_tfoot  = result.getElementsByTagName("TFOOT")[0];
+        const domains_tbody = result.getElementsByTagName("TBODY")[0];
+        const ctxt = {rows: rows, domains_map: {}};
+
+        for (var i in senses.result) {
+            gfwordnet.render_sense_rows(ctxt,result_tfoot,domains_tbody,senses.result[i].lex_ids);
+        }
+
+        gfwordnet.selection.lex_ids = gfwordnet.lex_ids;
+        gfwordnet.lex_ids = {};
+
+        let tr = result_tfoot.firstElementChild;
+        while (tr != null) {
+            gfwordnet.mangle_row_as_selected(tr);
+            tr = tr.nextElementSibling;
+        }
+
+        gfwordnet.insert_selection_header(result_tfoot);
+    }
+    gfwordnet.sense_call("lexical_ids="+encodeURIComponent(lexical_ids),helper);
+
+    searchBtn.addEventListener("click", (e) => {
+        gfwordnet.search(gfwordnet.selection, edt.value, domains, result, null);
+        doneBtn.disabled = false;
+    });
+}
+dg_grammarian.AbstractSyntaxEditor.prototype.init_relate_tab = function (container,doneBtn) {
+    clear(container);
+
+    const tree = node("ul", {}, []);
+
+    function build_tree(sense_id, graph) {
+        const subtree = node("ul", {class: "pointers"}, []);
+        for (let i in graph[sense_id].ptrs) {
+            const ptr = graph[sense_id].ptrs[i];
+            const checkbox = node("input",{type: "checkbox"},[]);
+            checkbox.addEventListener("click", function(e) {
+                doneBtn.disabled = true;
+                for (let checkbox of container.querySelectorAll("input[type=checkbox]")) {
+                    if (checkbox.checked) {
+                        doneBtn.disabled = false;
+                        break;
+                    }
+                }
+            });
+            checkbox.dataset.predicate = ptr[0];
+            checkbox.dataset.object = ptr[1];
+            const li = node("li",{},[text(graph[ptr[1]].gloss), text("\u00A0"), checkbox]);
+            subtree.appendChild(node("li",{},[text(ptr[0]),node("ul", {}, [li])]));
+        }
+        return node("li",{},[text(graph[sense_id].gloss), text("\u00A0"), subtree]);
+    }
+
+    function extract_glosses(res) {
+        clear(tree);
+        for (let i in res.synsets) {
+            tree.appendChild(build_tree(res.synsets[i], res.graph));
+        }
+    }
+
+    const lex_id = this.block_.xml_template.getAttribute("name");
+    gfwordnet.sense_call("context_id="+encodeURIComponent(lex_id)+"&depth=1",extract_glosses);
+    container.appendChild(tree);
+}
+dg_grammarian.AbstractSyntaxEditor.prototype.done = function (search,tab,container) {
+	if (tab.innerHTML == "Parse") {
+		this.done_parse_tab(search,container);
+	} else if (tab.innerHTML == "Lexicon") {
+		this.done_lexicon_tab(search,container);
+	} else if (tab.innerHTML == "Relate") {
+		this.done_relate_tab(search,container);
+	}
+}
+dg_grammarian.AbstractSyntaxEditor.prototype.done_parse_tab = function(search,container)  {       
+    if (this.state != null) {
+        const xmlDoc = document.implementation.createDocument(null,null);
+        const mutElem = xmlDoc.createElement("mutation");
+        const children = [];
+        this.block_.xml_template =
+            this.state.createXmlTemplateAndChildren(xmlDoc,Blockly.getMainWorkspace(),children,this.state.root);
+        mutElem.appendChild(this.block_.xml_template.cloneNode(true));
+        mutElem.setAttribute("type", this.state.chart[this.state.root].cat);
+
+        this.block_.clearAllInputs();
+        this.block_.domToMutation(mutElem);
+        for (let sub of children) {
+            const input = this.block_.getInput('arg '+sub[0]);
+            input.connection.connect(sub[1].outputConnection);
+        }
+
+        document.body.removeChild(search);
+    }
+}
+dg_grammarian.AbstractSyntaxEditor.prototype.done_lexicon_tab = function(search,container) {
+    const keys = [];
+    for (let lex_id in gfwordnet.selection.lex_ids) {
+        if (gfwordnet.selection.lex_ids[lex_id].match)
+            keys.push(lex_id);
+    }
+
+    let itemBlock = this.block_.outputConnection.targetBlock();
+    if (itemBlock != null && itemBlock.type == "ConceptualEditor.Item") {
+        for (;;) {
+            const prevBlock = itemBlock.previousConnection.targetBlock();
+            if (prevBlock == null || prevBlock.type != "ConceptualEditor.Item")
+                break;
+            itemBlock = prevBlock;
+        }
+
+        let connection = null;
+        while (itemBlock != null) {
+            connection = itemBlock.nextConnection;
+
+            const funBlock = itemBlock.getInput("of").connection.targetBlock();
+            if (funBlock != null &&
+                funBlock.type == "ConceptualEditor.Function" &&
+                funBlock.hasLexicalFunction()) {
+                const lex_id = funBlock.xml_template.getAttribute("name");
+                const index = keys.indexOf(lex_id);
+
+                if (index >= 0) {
+                    keys.splice(index,1);
+                    itemBlock = connection.targetBlock();
+                } else {
+                    const prevBlock = itemBlock.previousConnection.targetBlock();
+                    const nextBlock = connection.targetBlock();
+                    connection.disconnect();
+                    itemBlock.dispose();
+                    if (prevBlock.type == "ConceptualEditor.Item")
+                        prevBlock.nextConnection.connect(nextBlock.previousConnection);
+                    else
+                        prevBlock.getInput("do").connection.connect(nextBlock.previousConnection);
+                    itemBlock = nextBlock;
+                }
+            } else {
+                itemBlock = connection.targetBlock();
+            }
+        }
+
+        const xmlDoc = document.implementation.createDocument(null,null);
+
+        for (let lex_id of keys) {
+            const itemBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Item");
+            itemBlock.initSvg();
+            itemBlock.render();
+
+            const funBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Function");
+            funBlock.initSvg();
+            funBlock.render();
+
+            const mutElem = xmlDoc.createElement("mutation");
+            const funElem = xmlDoc.createElement("function");
+            mutElem.appendChild(funElem);
+            funElem.setAttribute("name", lex_id);
+            mutElem.setAttribute("type", this.block_.output);
+            funBlock.domToMutation(mutElem);
+            funBlock.xml_template = funElem;
+
+            itemBlock.getInput("of").connection.connect(funBlock.outputConnection);
+            connection.connect(itemBlock.previousConnection);
+            connection = itemBlock.nextConnection;
+        }
+    } else {
+        if (keys.length == 0) {
+            this.block_.dispose();
+        } else if (keys.length == 1) {
+            const lex_id = keys[0];
+
+            this.block_.xml_template.setAttribute("name", lex_id);
+
+            const xmlDoc = document.implementation.createDocument(null,null);
+            const mutElem = xmlDoc.createElement("mutation");
+            mutElem.appendChild(this.block_.xml_template.cloneNode(true));
+            mutElem.setAttribute("type", this.block_.output);
+            this.block_.clearAllInputs();
+            this.block_.domToMutation(mutElem);
+
+            document.body.removeChild(search);
+        } else {
+            const lexiconBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Lexicon");
+            lexiconBlock.initSvg();
+            lexiconBlock.render();
+
+            const xmlDoc = document.implementation.createDocument(null,null);
+
+            let connection = lexiconBlock.getInput("do").connection;
+            for (let lex_id of keys) {
+                const itemBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Item");
+                itemBlock.initSvg();
+                itemBlock.render();
+
+                const funBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Function");
+                funBlock.initSvg();
+                funBlock.render();
+
+                const mutElem = xmlDoc.createElement("mutation");
+                const funElem = xmlDoc.createElement("function");
+                mutElem.appendChild(funElem);
+                funElem.setAttribute("name", lex_id);
+                mutElem.setAttribute("type", this.block_.output);
+                funBlock.domToMutation(mutElem);
+                funBlock.xml_template = funElem;
+
+                itemBlock.getInput("of").connection.connect(funBlock.outputConnection);
+                connection.connect(itemBlock.previousConnection);
+                connection = itemBlock.nextConnection;
+            }
+
+            const targetConnection = this.block_.outputConnection.targetConnection;
+
+            this.block_.dispose();
+
+            if (targetConnection != null)
+                targetConnection.connect(lexiconBlock.outputConnection);
+        }
+    }
+}
+dg_grammarian.AbstractSyntaxEditor.prototype.done_relate_tab = function(search,container)  {
+    const targetConnection = this.block_.outputConnection.targetConnection;
+
+    this.block_.dispose();
+
+    const queryBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Query");
+    queryBlock.initSvg();
+    queryBlock.render();
+
+    queryBlock.variableScope.push("X");
+    queryBlock.getField("result").getOptions(false); // forces regeneration of the cache
+    queryBlock.getField("result").setValue("X");
+
+    if (targetConnection != null)
+        targetConnection.connect(queryBlock.outputConnection);
+
+    let connection = queryBlock.getInput("pattern").connection;
+    for (let checkbox of container.querySelectorAll("input[type=checkbox]")) {
+        if (checkbox.checked &&
+            checkbox.dataset.predicate != null && checkbox.dataset.object != null) {
+            if (!(checkbox.dataset.object in queryBlock.synsets))
+                queryBlock.synsets.push(checkbox.dataset.object);
+
+            const tripleBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Triple");
+            tripleBlock.initSvg();
+            tripleBlock.render();
+
+            connection.connect(tripleBlock.previousConnection);
+            connection = tripleBlock.nextConnection;
+
+            tripleBlock.getField("subject").getOptions(false); // forces regeneration of the cache
+            tripleBlock.getField("subject").setValue("X");
+            tripleBlock.getField("predicate").setValue(checkbox.dataset.predicate);
+            tripleBlock.getField("object").getOptions(false); // forces regeneration of the cache
+            tripleBlock.getField("object").setValue(checkbox.dataset.object);
+        }
     }
 }
 dg_grammarian.AbstractSyntaxEditor.prototype.isVisible = function() {
@@ -1506,6 +1911,34 @@ dg_grammarian.AbstractSyntaxEditor.onchange_production = function(fid,state,i) {
 	state.update_ui();
 }
 
+dg_grammarian.show_gloss_search_dialog = function() {
+    const edt = node("input", {type: "text", style: "width: 50em"}, []);
+    const searchBtn = node("input", {type: "button", value: "Search"}, []);
+    const tree = node("ul", {}, []);
+    const table = node("table", {}, [tr([td(edt),td(searchBtn)])
+                                    ,tr(node("td", {colspan: 2}, [tree]))]);
+    search = div_class("wn_search",[table]);
+
+    function build_tree(sense_id, graph) {
+        const subtree = node("ul", {class: "pointers"}, []);
+        for (let i in graph[sense_id].ptrs) {
+            const li = node("li",{},[text(graph[graph[sense_id].ptrs[i][1]].gloss), text("\u00A0"), node("button",{},[text("\u25BC")])]);
+            subtree.appendChild(node("li",{},[text(graph[sense_id].ptrs[i][0]),node("ul", {}, [li])]));
+        }
+        return node("li",{},[text(graph[sense_id].gloss), text("\u00A0"), node("button",{},[text("\u25BC")]), subtree]);
+    }
+
+    function extract_glosses(res) {
+        clear(tree);
+        tree.appendChild(build_tree(70971, res.graph));
+    }
+
+    searchBtn.addEventListener("click", (e) => {
+            gfwordnet.sense_call("context_id="+encodeURIComponent(edt.value),extract_glosses);
+        });
+    document.body.appendChild(search);
+}
+
 dg_grammarian.ConnectionChecker = function() {
   dg_grammarian.ConnectionChecker.superClass_.constructor.call(this);
 };
@@ -1658,6 +2091,7 @@ dg_grammarian.load_phrases = function(url, phrases, from, blocklyDiv, toolbox) {
     });
 
     gfwordnet.selection = getMultiSelection(from);
+    gfwordnet.lex_ids = {};
 
     var xhttp = new XMLHttpRequest();
     xhttp.onreadystatechange = function() {
