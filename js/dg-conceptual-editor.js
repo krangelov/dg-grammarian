@@ -212,10 +212,11 @@ ConceptualEditor.String.prototype.getAbstractSyntax = async function(context) {
 }
 
 ConceptualEditor.Query = function() {
-    this.result  = arguments[0];
-    this.desc    = arguments[1];
+    this.id    = arguments[0];
+    this.result  = arguments[1];
+    this.desc    = arguments[2];
     this.triples = [];
-    for (let i = 2; i < arguments.length; i++) {
+    for (let i = 3; i < arguments.length; i++) {
         this.triples.push(arguments[i]);
     }
     this.items   = [];
@@ -226,7 +227,8 @@ ConceptualEditor.Query.prototype.getAbstractSyntax = async function(context) {
     for (let i in context.choices) {
         const choice = context.choices[i];
 
-        if (choice.getNode() instanceof ConceptualEditor.Lexicon) {
+        if (choice.getNode() instanceof ConceptualEditor.Lexicon ||
+            choice.getNode() instanceof ConceptualEditor.Query) {
             const items = choice.getOptions();
             const no = parseInt(i)+1
             env[choice.getNode().id] = await items[choice.getChoice()].getAbstractSyntax(new ChoiceContext(context.editor));

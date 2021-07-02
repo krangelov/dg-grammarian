@@ -701,7 +701,8 @@ dg_grammarian = {};
                     break;
                 const child = inputList[i].connection.targetBlock();
                 if (child != null &&
-                    child.type == "ConceptualEditor.Lexicon") {
+                    (child.type == "ConceptualEditor.Lexicon" ||
+                     child.type == "ConceptualEditor.Query")) {
                     scope.splice(index, 0, child); 
                     index++;
                 }
@@ -805,6 +806,8 @@ dg_grammarian = {};
         let code =
             "new ConceptualEditor.Query(";
 
+        code += Blockly.JavaScript.quote_(block.id);
+        code += ",";
         code += Blockly.JavaScript.quote_(block.getFieldValue("result"));
 
         code += ",";
@@ -1009,13 +1012,16 @@ dg_grammarian.AbstractSyntaxEditor.prototype.setVisible = function(visible) {
                 this.onclick_tab(parseTab,container,doneBtn));
         row.push(td(parseTab));
 
-        if (this.block_.hasLexicalFunction()) {
+        if (this.block_.xml_template == null ||
+            this.block_.hasLexicalFunction()) {
             const lexiconTab =
               node("h1",{class: "unselected"},[text("Lexicon")]);
             lexiconTab.addEventListener("click", (e) =>
                     this.onclick_tab(lexiconTab,container,doneBtn));
             row.push(td(lexiconTab));
+        }
 
+        if (this.block_.hasLexicalFunction()) {
             const relateTab =
               node("h1",{class: "unselected"},[text("Relate")]);
             relateTab.addEventListener("click", (e) =>
@@ -1073,6 +1079,8 @@ dg_grammarian.AbstractSyntaxEditor.prototype.init = function (tab,container,done
 dg_grammarian.AbstractSyntaxEditor.prototype.init_parse_tab = function (container,doneBtn) {
     clear(container);
 
+    gfwordnet.selection = getMultiSelection(element('from'));
+
     const edt = node("input", {type: "text", placeholder: "Enter a phrase to parse", spellcheck: "false", style: "width: 50em"}, []);
     const parseBtn = node("input", {type: "button", value: "Parse"}, []);
     const linearization = node("td", {colspan: 2}, []);
@@ -1097,8 +1105,7 @@ dg_grammarian.AbstractSyntaxEditor.prototype.init_lexicon_tab = function (contai
 
     doneBtn.disabled = false;
 
-    gfwordnet.selection = getMultiSelection(element('from'));
-    gfwordnet.selection.lex_ids = {};
+    gfwordnet.selection = null;
     gfwordnet.can_select = true;
 
     const edt = node("input", {type: "text", placeholder: "Search for a word", spellcheck: "false"}, []);
@@ -1126,6 +1133,11 @@ dg_grammarian.AbstractSyntaxEditor.prototype.init_lexicon_tab = function (contai
             searchBtn.click();
         }
     });
+    searchBtn.addEventListener("click", (e) => {
+        gfwordnet.search(getMultiSelection(element('from')), edt.value, domains, result, null);
+        edt.value = "";
+        doneBtn.disabled = false;
+    });
 
     const lemmas = [];
     let   lexical_ids = "";
@@ -1150,18 +1162,23 @@ dg_grammarian.AbstractSyntaxEditor.prototype.init_lexicon_tab = function (contai
             }
             itemBlock = itemBlock.nextConnection.targetBlock();
         }
-    } else {
+    } else if (this.block_.xml_template != null) {
         const lex_id = this.block_.xml_template.getAttribute("name");
         lexical_ids = lex_id;
         lemmas.push({lemma: lex_id, prob: 0});
     }
+
+    if (lemmas.length == 0)
+        return;
+
+    gfwordnet.selection = getMultiSelection(element('from'));
 
     const rows =
         gfwordnet.render_rows(result,gfwordnet.selection,true,lemmas);
 
     function helper(senses) {
         const result_tfoot  = result.getElementsByTagName("TFOOT")[0];
-        const domains_tbody = result.getElementsByTagName("TBODY")[0];
+        const domains_tbody = domains.getElementsByTagName("TBODY")[0];
         const ctxt = {rows: rows, domains_map: {}};
 
         for (var i in senses.result) {
@@ -1180,14 +1197,11 @@ dg_grammarian.AbstractSyntaxEditor.prototype.init_lexicon_tab = function (contai
         gfwordnet.insert_selection_header(result_tfoot);
     }
     gfwordnet.sense_call("lexical_ids="+encodeURIComponent(lexical_ids),helper);
-
-    searchBtn.addEventListener("click", (e) => {
-        gfwordnet.search(gfwordnet.selection, edt.value, domains, result, null);
-        doneBtn.disabled = false;
-    });
 }
 dg_grammarian.AbstractSyntaxEditor.prototype.init_relate_tab = function (container,doneBtn) {
     clear(container);
+
+    gfwordnet.selection = getMultiSelection(element('from'));
 
     const tree = node("ul", {}, []);
 
@@ -1254,98 +1268,89 @@ dg_grammarian.AbstractSyntaxEditor.prototype.done_parse_tab = function(search,co
     }
 }
 dg_grammarian.AbstractSyntaxEditor.prototype.done_lexicon_tab = function(search,container) {
-    const keys = [];
-    for (let lex_id in gfwordnet.selection.lex_ids) {
-        if (gfwordnet.selection.lex_ids[lex_id].match)
-            keys.push(lex_id);
-    }
+    if (gfwordnet.selection.concepts != null) {
+        const targetConnection = this.block_.outputConnection.targetConnection;
 
-    let itemBlock = this.block_.outputConnection.targetBlock();
-    if (itemBlock != null && itemBlock.type == "ConceptualEditor.Item") {
-        for (;;) {
-            const prevBlock = itemBlock.previousConnection.targetBlock();
-            if (prevBlock == null || prevBlock.type != "ConceptualEditor.Item")
-                break;
-            itemBlock = prevBlock;
-        }
+        this.block_.dispose();
 
-        let connection = null;
-        while (itemBlock != null) {
-            connection = itemBlock.nextConnection;
+        const queryBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Query");
+        queryBlock.initSvg();
+        queryBlock.render();
 
-            const funBlock = itemBlock.getInput("of").connection.targetBlock();
-            if (funBlock != null &&
-                funBlock.type == "ConceptualEditor.Function" &&
-                funBlock.hasLexicalFunction()) {
-                const lex_id = funBlock.xml_template.getAttribute("name");
-                const index = keys.indexOf(lex_id);
+        queryBlock.variableScope.push("X");
+        queryBlock.getField("result").getOptions(false); // forces regeneration of the cache
+        queryBlock.getField("result").setValue("X");
 
-                if (index >= 0) {
-                    keys.splice(index,1);
-                    itemBlock = connection.targetBlock();
-                } else {
-                    const prevBlock = itemBlock.previousConnection.targetBlock();
-                    const nextBlock = connection.targetBlock();
-                    connection.disconnect();
-                    itemBlock.dispose();
-                    if (prevBlock.type == "ConceptualEditor.Item")
-                        prevBlock.nextConnection.connect(nextBlock.previousConnection);
-                    else
-                        prevBlock.getInput("do").connection.connect(nextBlock.previousConnection);
-                    itemBlock = nextBlock;
-                }
-            } else {
-                itemBlock = connection.targetBlock();
-            }
-        }
+        if (targetConnection != null)
+            queryBlock.outputConnection.connect(targetConnection);
 
-        const xmlDoc = document.implementation.createDocument(null,null);
+        let connection = queryBlock.getInput("pattern").connection;
+        for (let x of gfwordnet.selection.concepts) {
+            const synset = ""+x;
+            if (!(synset in queryBlock.synsets))
+                queryBlock.synsets.push(synset);
 
-        for (let lex_id of keys) {
-            const itemBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Item");
-            itemBlock.initSvg();
-            itemBlock.render();
+            const tripleBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Triple");
+            tripleBlock.initSvg();
+            tripleBlock.render();
 
-            const funBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Function");
-            funBlock.initSvg();
-            funBlock.render();
+            connection.connect(tripleBlock.previousConnection);
+            connection = tripleBlock.nextConnection;
 
-            const mutElem = xmlDoc.createElement("mutation");
-            const funElem = xmlDoc.createElement("function");
-            mutElem.appendChild(funElem);
-            funElem.setAttribute("name", lex_id);
-            mutElem.setAttribute("type", this.block_.output);
-            funBlock.domToMutation(mutElem);
-            funBlock.xml_template = funElem;
-
-            itemBlock.getInput("of").connection.connect(funBlock.outputConnection);
-            connection.connect(itemBlock.previousConnection);
-            connection = itemBlock.nextConnection;
+            tripleBlock.getField("subject").getOptions(false); // forces regeneration of the cache
+            tripleBlock.getField("subject").setValue("X");
+            tripleBlock.getField("predicate").setValue("InstanceHypernym");
+            tripleBlock.getField("object").getOptions(false); // forces regeneration of the cache
+            tripleBlock.getField("object").setValue(synset);
         }
     } else {
-        if (keys.length == 0) {
-            this.block_.dispose();
-        } else if (keys.length == 1) {
-            const lex_id = keys[0];
+        const keys = [];
+        for (let lex_id in gfwordnet.selection.lex_ids) {
+            if (gfwordnet.selection.lex_ids[lex_id].match)
+                keys.push(lex_id);
+        }
 
-            this.block_.xml_template.setAttribute("name", lex_id);
+        let itemBlock = this.block_.outputConnection.targetBlock();
+        if (itemBlock != null && itemBlock.type == "ConceptualEditor.Item") {
+            for (;;) {
+                const prevBlock = itemBlock.previousConnection.targetBlock();
+                if (prevBlock == null || prevBlock.type != "ConceptualEditor.Item")
+                    break;
+                itemBlock = prevBlock;
+            }
+
+            let connection = null;
+            while (itemBlock != null) {
+                connection = itemBlock.nextConnection;
+
+                const funBlock = itemBlock.getInput("of").connection.targetBlock();
+                if (funBlock != null &&
+                    funBlock.type == "ConceptualEditor.Function" &&
+                    funBlock.hasLexicalFunction()) {
+                    const lex_id = funBlock.xml_template.getAttribute("name");
+                    const index = keys.indexOf(lex_id);
+
+                    if (index >= 0) {
+                        keys.splice(index,1);
+                        itemBlock = connection.targetBlock();
+                    } else {
+                        const prevBlock = itemBlock.previousConnection.targetBlock();
+                        const nextBlock = connection.targetBlock();
+                        connection.disconnect();
+                        itemBlock.dispose();
+                        if (prevBlock.type == "ConceptualEditor.Item")
+                            prevBlock.nextConnection.connect(nextBlock.previousConnection);
+                        else
+                            prevBlock.getInput("do").connection.connect(nextBlock.previousConnection);
+                        itemBlock = nextBlock;
+                    }
+                } else {
+                    itemBlock = connection.targetBlock();
+                }
+            }
 
             const xmlDoc = document.implementation.createDocument(null,null);
-            const mutElem = xmlDoc.createElement("mutation");
-            mutElem.appendChild(this.block_.xml_template.cloneNode(true));
-            mutElem.setAttribute("type", this.block_.output);
-            this.block_.clearAllInputs();
-            this.block_.domToMutation(mutElem);
 
-            document.body.removeChild(search);
-        } else {
-            const lexiconBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Lexicon");
-            lexiconBlock.initSvg();
-            lexiconBlock.render();
-
-            const xmlDoc = document.implementation.createDocument(null,null);
-
-            let connection = lexiconBlock.getInput("do").connection;
             for (let lex_id of keys) {
                 const itemBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Item");
                 itemBlock.initSvg();
@@ -1367,13 +1372,59 @@ dg_grammarian.AbstractSyntaxEditor.prototype.done_lexicon_tab = function(search,
                 connection.connect(itemBlock.previousConnection);
                 connection = itemBlock.nextConnection;
             }
+        } else {
+            if (keys.length == 0) {
+                this.block_.dispose();
+            } else if (keys.length == 1) {
+                const lex_id = keys[0];
 
-            const targetConnection = this.block_.outputConnection.targetConnection;
+                this.block_.xml_template.setAttribute("name", lex_id);
 
-            this.block_.dispose();
+                const xmlDoc = document.implementation.createDocument(null,null);
+                const mutElem = xmlDoc.createElement("mutation");
+                mutElem.appendChild(this.block_.xml_template.cloneNode(true));
+                mutElem.setAttribute("type", this.block_.output);
+                this.block_.clearAllInputs();
+                this.block_.domToMutation(mutElem);
 
-            if (targetConnection != null)
-                targetConnection.connect(lexiconBlock.outputConnection);
+                document.body.removeChild(search);
+            } else {
+                const lexiconBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Lexicon");
+                lexiconBlock.initSvg();
+                lexiconBlock.render();
+
+                const xmlDoc = document.implementation.createDocument(null,null);
+
+                let connection = lexiconBlock.getInput("do").connection;
+                for (let lex_id of keys) {
+                    const itemBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Item");
+                    itemBlock.initSvg();
+                    itemBlock.render();
+
+                    const funBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Function");
+                    funBlock.initSvg();
+                    funBlock.render();
+
+                    const mutElem = xmlDoc.createElement("mutation");
+                    const funElem = xmlDoc.createElement("function");
+                    mutElem.appendChild(funElem);
+                    funElem.setAttribute("name", lex_id);
+                    mutElem.setAttribute("type", this.block_.output);
+                    funBlock.domToMutation(mutElem);
+                    funBlock.xml_template = funElem;
+
+                    itemBlock.getInput("of").connection.connect(funBlock.outputConnection);
+                    connection.connect(itemBlock.previousConnection);
+                    connection = itemBlock.nextConnection;
+                }
+
+                const targetConnection = this.block_.outputConnection.targetConnection;
+
+                this.block_.dispose();
+
+                if (targetConnection != null)
+                    targetConnection.connect(lexiconBlock.outputConnection);
+            }
         }
     }
 }
