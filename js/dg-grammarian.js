@@ -1488,21 +1488,23 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
 		state.fids[fid] = 0;
 
 		const info = state.chart[fid];
-		for (let i in info.brackets) {
-			const bracket = info.brackets[i];
-			bracket.fid = fid;
-			state.offsets.push(bracket.start);
-			state.offsets.push(bracket.end);
-		}
+        if (info != null) {
+            for (let i in info.brackets) {
+                const bracket = info.brackets[i];
+                bracket.fid = fid;
+                state.offsets.push(bracket.start);
+                state.offsets.push(bracket.end);
+            }
 
-		info.current = 0;
+            info.current = 0;
 
-		for (let i in info.prods) {
-			const prod = info.prods[i];
-			for (let j in prod.args) {
-				collect_info(prod.args[j],state);
-			}
-		}
+            for (let i in info.prods) {
+                const prod = info.prods[i];
+                for (let j in prod.args) {
+                    collect_info(prod.args[j],state);
+                }
+            }
+        }
 	}
 	function select_bracket(table,colspan,fid,lex_id,frames) {
 		gfwordnet.select_bracket(table,colspan,fid,lex_id,frames);
@@ -1845,7 +1847,7 @@ dg_grammarian.AbstractSyntaxEditor.prototype.parse = function (sentence, lineari
             }
         }
     }
-	gfwordnet.grammar_call("command=c-parseToChart&limit=1&from="+gfwordnet.selection.current+"&input="+encodeURIComponent(sentence)+((startCat != null) ? "&cat="+startCat : ""),extract_parse.bind(this));
+	gfwordnet.grammar_call("command=c-parseToChart&limit=25&from="+gfwordnet.selection.current+"&input="+encodeURIComponent(sentence)+((startCat != null) ? "&cat="+startCat : ""),extract_parse.bind(this));
 }
 dg_grammarian.AbstractSyntaxEditor.onmouseenter_bracket = function(cell,fid,state) {
 	if (cell.firstElementChild != null) {
