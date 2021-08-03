@@ -1269,9 +1269,16 @@ dg_grammarian.AbstractSyntaxEditor.prototype.done_parse_tab = function(search,co
 }
 dg_grammarian.AbstractSyntaxEditor.prototype.done_lexicon_tab = function(search,container) {
     if (gfwordnet.selection.concepts != null) {
-        const targetConnection = this.block_.outputConnection.targetConnection;
+        let targetBlock = this.block_.outputConnection.targetBlock();
+        while (targetBlock.type == "ConceptualEditor.Item") {
+            const prevBlock = targetBlock.previousConnection.targetBlock();
+            if (prevBlock == null)
+                break;
+            targetBlock = prevBlock;
+        }
+        const targetConnection = targetBlock.outputConnection.targetConnection;
 
-        this.block_.dispose();
+        targetBlock.dispose();
 
         const queryBlock = Blockly.getMainWorkspace().newBlock("ConceptualEditor.Query");
         queryBlock.initSvg();
